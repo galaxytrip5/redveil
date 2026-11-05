@@ -59,7 +59,10 @@ def test_rate_table_bounded_under_many_keys():
             assert len(client._rate_window) == MAX_RATE_KEYS + 40
             half = MAX_RATE_KEYS // 2
             for k in list(client._rate_window)[:half]:
-                client._rate_window[k] = (0.0, 1)  # ancient window start
+                # backdate against the clock http.py reads — a monotonic 0.0
+                # only counts as stale once the host has booted for a full
+                # period, which a fresh CI VM hasn't
+                client._rate_window[k] = (time.monotonic() - rate.period - 1.0, 1)
             await client._acquire("k-new", rate)
             survived = len(client._rate_window)
         finally:
