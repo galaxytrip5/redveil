@@ -1,0 +1,28 @@
+# runtime artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# local databases (real campaign data — never commit)
+*.db
+*.db-wal
+*.db-shm
+
+# tooling binaries and environments
+opencode.exe
+venv/
+.venv/
+build/
+dist/
+*.egg-info/
+
+# local dbs + bytecode autopsies from the AV incident
+stager_dis.txt
+
+# editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
