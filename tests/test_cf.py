@@ -1011,3 +1011,147 @@ def test_gui_html_wires_live_stream():
     assert "EventSource" in html
     assert "/api/events" in html
     assert "/status" in html
+
+
+# ─── category packs / generator (framework v1) ───
+
+
+def test_every_pack_validates():
+    import string
+
+    from cf.collect import COLLECTORS, EXFIL
+    from cf.generator import CTX_KEYS, builtin_chains, list_packs, load_pack
+    from cf.lure import SCENARIOS
+    from cf.techniques import TECHNIQUES
+
+    packs = list_packs()
+    assert len(packs) >= 6
+    assert len(set(packs)) == len(packs)
+    surfaces = {t.surface for t in TECHNIQUES.values()}
+    tags = {tg for t in TECHNIQUES.values() for tg in t.tags}
+    chains = builtin_chains()
+    seen_ids: set[str] = set()
+    for pid in packs:
+        spec = load_pack(pid)
+        assert spec["id"] == pid
+        assert pid not in seen_ids
+        seen_ids.add(pid)
+        assert spec["scenarios"]
+        assert all(s in SCENARIOS for s in spec["scenarios"])
+        assert "email" in spec["channels"]
+        for tpl in spec["channels"].values():
+            assert tpl.get("body")
+            for field_name in ("subject", "body"):
+                raw = tpl.get(field_name)
+                if not raw:
+                    continue
+                for _, field, _, _ in string.Formatter().parse(str(raw)):
+                    if field:
+                        root = field.split(".")[0].split("[")[0]
+                        assert root in CTX_KEYS, (pid, field)
+        for s in spec["techniques"]["surfaces"]:
+            assert s in surfaces
+        for tg in spec["techniques"]["prefer_tags"]:
+            assert tg in tags
+        for tid in spec["techniques"]["avoid"]:
+            assert tid in TECHNIQUES
+        assert 1 <= spec["techniques"]["min_reliability"] <= 5
+        for kind in spec["payload"]["collect"]:
+            assert kind in COLLECTORS
+        assert spec["payload"]["exfil"] in EXFIL
+        assert 0 <= spec["payload"]["jitter"] <= 0.9
+        assert 1 <= spec["opsec"]["variant_count"] <= 10
+        for eid in spec["exploits"]:
+            assert eid in chains
+
+
+def test_select_techniques_follows_pack_rules():
+    from cf.generator import list_packs, load_pack, select_techniques
+
+    for pid in list_packs():
+        pack = load_pack(pid)
+        rules = pack["techniques"]
+        selected = select_techniques(pack)
+        assert selected, pid
+        for tech in selected:
+            assert tech.id not in rules["avoid"]
+            if rules["surfaces"]:
+                assert tech.surface in rules["surfaces"]
+            assert tech.reliability >= rules["min_reliability"]
+
+
+def test_generate_is_deterministic_and_seed_sensitive():
+    from cf.generator import generate
+
+    a = generate("colis", seed=7)
+    b = generate("colis", seed=7)
+    assert a == b
+    c = generate("colis", seed=8)
+    assert [v["token"] for v in a["variants"]] != [v["token"] for v in c["variants"]]
+    for v in a["variants"]:
+        assert v["command"] and v["body"]
+        assert "{" not in v["body"]
+        if v["subject"]:
+            assert "{" not in v["subject"]
+    assert a["payload"]["chain"]["primitives"]
+    assert a["exploits"]
+    assert all(e["command"] and "{" not in e["command"] for e in a["exploits"])
+
+
+def test_generate_channel_and_bounds():
+    from cf.generator import generate
+
+    sms = generate("colis", channel="sms", seed=1)
+    assert sms["channel"] == "sms"
+    with pytest.raises(ValueError, match="channel"):
+        generate("cloudflare", channel="sms")
+    with pytest.raises(ValueError, match="1..10"):
+        generate("colis", variants=99)
+    assert len(generate("colis", variants=1)["variants"]) == 1
+    with pytest.raises(FileNotFoundError):
+        generate("no-such-pack")
+
+
+def test_cli_generate_list_and_json(capsys):
+    import json
+
+    from cf.cli import Cli
+
+    assert Cli(["generate", "list"]).run() == 0
+    listed = capsys.readouterr().out.split()
+    assert "colis" in listed
+    assert "crypto" in listed
+
+    assert Cli(["generate", "crypto", "--seed", "3"]).run() == 0
+    bundle = json.loads(capsys.readouterr().out)
+    assert bundle["pack"] == "crypto"
+    assert bundle["variants"]
+    assert bundle["techniques"]
+
+
+def test_cli_generate_unknown_pack_exits():
+    from cf.cli import Cli
+
+    assert Cli(["generate", "no-such-pack"]).run() == 1
+
+
+def test_write_bundle_renders_lures(tmp_path):
+    import json
+
+    from cf.generator import generate, write_bundle
+
+    bundle = generate("update", seed=5, base_url="https://phish.example")
+    written = write_bundle(bundle, tmp_path / "out")
+    assert set(written) == {
+        "bundle.json",
+        "lure-1.html",
+        "lure-2.html",
+        "lure-3.html",
+    }
+    html = (tmp_path / "out" / "lure-1.html").read_text(encoding="utf-8")
+    assert "</html>" in html
+    on_disk = json.loads(
+        (tmp_path / "out" / "bundle.json").read_text(encoding="utf-8")
+    )
+    assert on_disk["pack"] == "update"
+    assert on_disk["variants"][0]["command"]

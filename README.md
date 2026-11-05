@@ -43,7 +43,7 @@ is exercised through fake transports (`tests/test_http.py`).
 
 | path | role |
 |---|---|
-| `cf/cli.py`, `cf/cli_core.py`, `cf/cmds_*.py` | dispatch core, flag/render helpers, five command groups |
+| `cf/cli.py`, `cf/cli_core.py`, `cf/cmds_*.py` | dispatch core, flag/render helpers, six command groups |
 | `cf/store.py` | SQLite persistence (WAL, single connection, RLock) |
 | `cf/http.py` | one pooled async client — retries, backoff, rate limits |
 | `cf/server.py` | landing server: lure, stager, hit collection, OAuth |
@@ -51,7 +51,8 @@ is exercised through fake transports (`tests/test_http.py`).
 | `cf/c2.py`, `cf/delivery.py`, `cf/chain.py` | legit-service C2, SaaS notification delivery, AiTM token chain |
 | `cf/ext.py`, `cf/relay.py`, `cf/payload.py` | Chrome MV3 extension C2, cloud relay codegen, payload factory |
 | `cf/techniques.py` | technique catalog logic — rows live in `cf/data/techniques.json`, parsed on first use, `validate()` in the test suite |
-| `cf/access.py`, `cf/creds.py`, `cf/lateral.py`, `cf/collect.py`, `cf/exfil.py`, `cf/opsec.py` | apt module builders behind the `cmds_apt` commands |
+| `cf/generator.py`, `cf/cmds_generate.py` | category-pack generator — packs in `cf/data/categories/*.json`, deterministic seed, `redveil-pro` seam for premium packs + exploit chains |
+| `cf/access.py`, `cf/creds.py`, `cf/lateral.py`, `cf/collect.py`, `cf/opsec.py` | apt module builders (collection + exfil snippets live in `cf/collect.py`) behind the `cmds_apt` commands |
 | `cf/report.py`, `cf/gui.py` | funnel report/CSV/Sigma export and the local dashboard (`cf/gui.html`) |
 | `cf/license.py` | signed license tiers, quotas, demo watermark |
 | `cf/util.py` | colors, json, `resolve_secret`, `run_async` timeouts |
@@ -68,6 +69,7 @@ is exercised through fake transports (`tests/test_http.py`).
 | `scenarios.json` | `cf/lure.py` | module import, cached |
 | `lure_template.html` | `cf/lure.py` `_template()` | first render, cached |
 | `payload_factory.hpp` | `cf/payload.py` `_payload_hpp()` | first read, cached |
+| `categories/*.json` | `cf/generator.py` `load_pack()` | first `generate`, validated at load, full `validate()` in the test suite |
 
 Edit the JSON directly. The suite validates technique rows against `KINDS`
 (`validate()`) and renders every scenario, so a bad row fails `pytest`.
@@ -110,6 +112,7 @@ Secrets resolve in order: flag → env → piped stdin (non-tty) → prompt.
 - `SELLING.md` — commercial notes
 - `TODOS.md` — open work
 - `ROADMAP.md` — planned versions
+- `EDITIONS.md` — open-source core vs `redveil-pro` matrix and seams
 
 ## Version
 

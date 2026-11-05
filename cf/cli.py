@@ -21,6 +21,7 @@ from .cmds_apt import AptCommands
 from .cmds_artifacts import ArtifactCommands
 from .cmds_campaign import CampaignCommands
 from .cmds_delivery import DeliveryCommands
+from .cmds_generate import GenerateCommands
 from .util import (
     c_bold,
     c_cyan,
@@ -62,6 +63,7 @@ class Cli(
     ArtifactCommands,
     AptCommands,
     AdminCommands,
+    GenerateCommands,
 ):
     """Dispatch core — argv parsing, store/lic access, tier gates, help.
     Command bodies live in the cf.cmds_* mixins."""
@@ -76,6 +78,7 @@ class Cli(
             "target": self.cmd_target,
             "targets": self.cmd_target,
             "lure": self.cmd_lure,
+            "generate": self.cmd_generate,
             "stager": self.cmd_stager,
             "export": self.cmd_export,
             "status": self.cmd_status,
@@ -204,6 +207,10 @@ class Cli(
                 ("technique list", "[--surface S] [--category C] [--tag T] [--q TEXT] [--json]"),
                 ("technique show <id>", "[--url BASE]  full telemetry + opsec notes"),
                 ("technique export", "[--format md|json] [--sigma] [--out F]"),
+            ]),
+            ("generator", [
+                ("generate <pack>", "[--channel C] [--variants N] [--seed N] [--url U] [--out DIR]  pack → bundle"),
+                ("generate list", "available category packs"),
             ]),
             ("delivery & c2", [
                 ("serve", "[--host H] [--port P] [--url U] [--cert C --key K] [--filter]"),

