@@ -19,6 +19,9 @@ dev = [
 [tool.setuptools]
 packages = ["cf"]
 
+[tool.setuptools.package-data]
+cf = ["data/*", "gui.html"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

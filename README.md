@@ -33,14 +33,15 @@ is exercised through fake transports (`tests/test_http.py`).
 
 | path | role |
 |---|---|
-| `cf/cli.py` | command dispatch, rendering, flags |
+| `cf/cli.py`, `cf/cli_core.py`, `cf/cmds_*.py` | dispatch core, flag/render helpers, five command groups |
 | `cf/store.py` | SQLite persistence (WAL, single connection, RLock) |
 | `cf/http.py` | one pooled async client — retries, backoff, rate limits |
 | `cf/server.py` | landing server: lure, stager, hit collection, OAuth |
-| `cf/lure.py`, `cf/stager.py` | lure rendering and Win+R stager builders |
+| `cf/lure.py`, `cf/stager.py` | lure rendering and Win+R stager builders (page + scenarios in `cf/data/`) |
 | `cf/c2.py`, `cf/delivery.py`, `cf/chain.py` | legit-service C2, SaaS notification delivery, AiTM token chain |
 | `cf/ext.py`, `cf/relay.py`, `cf/payload.py` | Chrome MV3 extension C2, cloud relay codegen, payload factory |
-| `cf/techniques.py` | the technique catalog, validated against `KINDS` at startup |
+| `cf/techniques.py` | technique catalog logic — rows live in `cf/data/techniques.json`, parsed on first use, `validate()` in the test suite |
+| `cf/data/` | shipped data: technique rows, lure scenarios + template, payload factory header |
 | `cf/report.py`, `cf/gui.py` | funnel report/CSV/Sigma export and the local dashboard |
 | `cf/license.py` | signed license tiers, quotas, demo watermark |
 | `tests/` | offline suite (`test_cf.py` core, plus per-area regression files) |

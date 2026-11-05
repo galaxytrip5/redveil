@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="__LOCALE__">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>__TITLE__</title>
+<style>
+  :root { --accent: __ACCENT__; --bg: __BG__; --card: __CARD__; --fg: __FG__;
+          --muted: __MUTED__; --line: __LINE__; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: radial-gradient(1200px 600px at 20% -10%, color-mix(in srgb, var(--accent) 18%, transparent), transparent), var(--bg);
+    color: var(--fg);
+    font: 15px/1.5 "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  .wrap { width: 100%; max-width: 560px; }
+  .top { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .dot { width: 28px; height: 28px; border-radius: 8px; background: var(--accent);
+         display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 13px; }
+  .brand { font-weight: 600; letter-spacing: .2px; }
+  .chip { margin-left: auto; font-size: 12px; padding: 4px 9px; border-radius: 999px;
+          background: color-mix(in srgb, var(--accent) 16%, transparent);
+          color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+          padding: 26px 24px; box-shadow: 0 18px 50px rgba(0,0,0,.28); }
+  h1 { font-size: 21px; line-height: 1.3; margin-bottom: 8px; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 22px; }
+  ol { list-style: none; counter-reset: s; margin-bottom: 20px; }
+  ol li { counter-increment: s; display: flex; gap: 12px; align-items: center;
+          padding: 10px 0; border-bottom: 1px dashed var(--line); }
+  ol li:last-child { border-bottom: 0; }
+  ol li::before { content: counter(s); flex: 0 0 24px; height: 24px; border-radius: 50%;
+                  background: color-mix(in srgb, var(--accent) 20%, transparent);
+                  color: var(--accent); font-size: 12px; font-weight: 700;
+                  display: grid; place-items: center; }
+  kbd { font: 12px/1 ui-monospace, Consolas, monospace; background: var(--bg);
+        border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 6px;
+        padding: 4px 7px; white-space: nowrap; }
+  .cmd { position: relative; background: var(--bg); border: 1px solid var(--line);
+         border-radius: 10px; padding: 14px 14px 14px 14px; margin-bottom: 14px; }
+  .cmd code { display: block; font: 12.5px/1.55 ui-monospace, Consolas, monospace;
+              word-break: break-all; color: var(--fg); user-select: all; }
+  button, .btn { width: 100%; border: 0; border-radius: 10px; padding: 13px 16px;
+                 font-size: 14.5px; font-weight: 600; cursor: pointer; }
+  .primary { background: var(--accent); color: #fff; }
+  .primary:hover { filter: brightness(1.08); }
+  .ghost { margin-top: 10px; background: transparent; color: var(--muted);
+           border: 1px solid var(--line); }
+  .ghost:hover { color: var(--fg); }
+  .ghost[disabled] { opacity: .45; cursor: not-allowed; }
+  .foot { margin-top: 14px; font-size: 12px; color: var(--muted); text-align: center; }
+  .status { font-size: 12.5px; color: var(--muted); margin-top: 12px; text-align: center;
+            min-height: 18px; }
+  @media (max-width: 480px) { .card { padding: 20px 16px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="dot">__DOT__</div>
+    <div class="brand">__BRAND__</div>
+    <div class="chip">__BADGE__</div>
+  </div>
+  <div class="card">
+    <h1>__HEADLINE__</h1>
+    <p class="sub">__SUB__</p>
+    <ol>
+      __STEPS__
+    </ol>
+    <div class="cmd"><code id="cmd">__COMMAND__</code></div>
+    <button class="primary" id="copy">__COPY__</button>
+    <button class="ghost" id="go" disabled>__CONTINUE__</button>
+    <div class="status" id="status">__WAIT__</div>
+  </div>
+  <p class="foot">__FOOT__</p>
+</div>
+<script>
+(function () {
+  var TOKEN = __TOKEN_JSON__;
+  var COMMAND = __COMMAND_JSON__;
+  var COPIED = __COPIED_JSON__;
+  var COPY = __COPY_JSON__;
+  var go = document.getElementById("go");
+  var status = document.getElementById("status");
+  var copyBtn = document.getElementById("copy");
+
+  function beacon(path) {
+    try {
+      var i = new Image(1, 1);
+      i.src = path;
+    } catch (e) {}
+  }
+  beacon(__PIXEL_JSON__);
+
+  function done() {
+    copyBtn.textContent = COPIED;
+    go.disabled = false;
+    status.textContent = "";
+    beacon("/hit/" + TOKEN + "?s=copy");
+  }
+
+  copyBtn.addEventListener("click", function () {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(COMMAND).then(done, fallback);
+    } else {
+      fallback();
+    }
+  });
+
+  function fallback() {
+    var ta = document.createElement("textarea");
+    ta.value = COMMAND;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); done(); }
+    catch (e) { status.textContent = "select the command and press Ctrl+C"; }
+    document.body.removeChild(ta);
+  }
+
+  go.addEventListener("click", function () {
+    beacon("/hit/" + TOKEN + "?s=continue");
+    window.location.href = __CONTINUE_JSON__;
+  });
+
+  setTimeout(function () {
+    if (!go.disabled) return;
+    copyBtn.textContent = COPY;
+  }, 4000);
+})();
+</script>
+</body>
+</html>

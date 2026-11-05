@@ -156,19 +156,22 @@ def run_async(coro: Coroutine[Any, Any, Any], timeout: float | None = None) -> A
 
 
 def resolve_secret(cli_value: str, env_name: str, prompt: str) -> str:
-    """Tokens never ride in argv by default — env first, prompt as fallback."""
+    """Tokens never ride in argv by default — env first, piped stdin, prompt last."""
     if cli_value:
         return cli_value
     val = os.environ.get(env_name, "")
     if val:
         return val
+    if not sys.stdin.isatty():
+        # no terminal: take a piped value instead of prompting (getpass would
+        # emit a GetPassWarning and still block on the same stream)
+        try:
+            return sys.stdin.readline().strip()
+        except (OSError, ValueError):
+            return ""
     try:
         import getpass
 
         return getpass.getpass(prompt)
     except (EOFError, KeyboardInterrupt, OSError, ImportError):
         return ""
-
-
-def eprint(msg: str) -> None:
-    print(msg, file=sys.stderr)
