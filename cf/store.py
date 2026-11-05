@@ -55,6 +55,10 @@ CREATE TABLE IF NOT EXISTS send_profiles (
     config   TEXT NOT NULL DEFAULT '{}',
     created_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS webhooks (
+    id    INTEGER PRIMARY KEY AUTOINCREMENT,
+    url   TEXT NOT NULL UNIQUE
+);
 CREATE TABLE IF NOT EXISTS hits (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     token        TEXT NOT NULL,
@@ -612,3 +616,39 @@ class Store:
                 "DELETE FROM send_profiles WHERE name=?", (name,)
             )
         return cur.rowcount > 0
+
+    # ─── outbound webhooks ───
+
+    def list_webhooks(self) -> list[str]:
+        return [
+            str(r["url"])
+            for r in self._all("SELECT url FROM webhooks ORDER BY id")
+        ]
+
+    def add_webhook(self, url: str) -> None:
+        cleaned = url.strip()
+        if not cleaned.startswith(("http://", "https://")):
+            raise ValueError("webhook url must be http(s)://")
+        with self._tx() as c:
+            c.execute("INSERT OR IGNORE INTO webhooks (url) VALUES (?)", (cleaned,))
+
+    def remove_webhook(self, url: str) -> bool:
+        with self._tx() as c:
+            cur = c.execute("DELETE FROM webhooks WHERE url=?", (url.strip(),))
+        return cur.rowcount > 0
+
+    def proxy_sessions(self, limit: int = 100) -> list[dict[str, Any]]:
+        """Captured proxy artefacts — forms and cookies, newest first."""
+        return [
+            {
+                "kind": str(r["kind"]),
+                "payload": json.loads(str(r["payload"] or "{}")),
+                "at": float(r["created_at"]),
+            }
+            for r in self._all(
+                "SELECT kind, payload, created_at FROM events "
+                "WHERE campaign_id='' AND kind LIKE 'proxy:%' "
+                "ORDER BY id DESC LIMIT ?",
+                (max(1, min(int(limit), 500)),),
+            )
+        ]

