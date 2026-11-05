@@ -25,8 +25,6 @@ them:
   collector
 - self-contained HTML engagement report bundle (single file, no external
   assets)
-- GUI live funnel updates instead of refresh — SSE over the aiohttp app that
-  already serves `gui.html`
 - lure locale table grows past fr/en (`_wait_label` / `_foot_label` hardcode
   the two)
 

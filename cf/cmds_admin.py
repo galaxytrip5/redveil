@@ -104,5 +104,9 @@ class AdminCommands:
         open_browser = not bool(self.flags.get("no-browser", False))
         try:
             run_async(gui.run_forever(open_browser=open_browser))
+        except ValueError as exc:
+            # open bind without auth is refused before anything binds
+            err(str(exc))
+            raise SystemExit(1) from None
         except KeyboardInterrupt:
             ok("gui stopped")

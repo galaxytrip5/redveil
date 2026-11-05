@@ -947,3 +947,67 @@ def test_new_scenarios_render():
         html = LureBuilder.render(sid, token="T", command="c", continue_url="https://x", locale="fr")
         assert "<title>" in html
         assert "</html>" in html
+
+
+# ─── pro gui: live server mode ───
+
+
+def test_gui_sse_and_status_routes(tmp_path):
+    from cf.gui import RedveilGUI
+    from cf.store import Store
+
+    store = Store(str(tmp_path / "g.db"))
+    gui = RedveilGUI(store, auth=False)
+    app = gui.build_app()
+    routes = {r.resource.canonical for r in app.router.routes()}
+    assert "/api/events" in routes
+    assert "/api/status" in routes
+    store.close()
+
+
+def test_gui_broadcast_drops_oldest_not_newest(tmp_path):
+    import asyncio
+
+    from cf.gui import RedveilGUI
+    from cf.store import Store
+
+    store = Store(str(tmp_path / "g.db"))
+    gui = RedveilGUI(store, auth=False)
+
+    async def run():
+        q: asyncio.Queue = asyncio.Queue(maxsize=2)
+        gui._subs.add(q)
+        for ip in ("1.1.1.1", "2.2.2.2", "3.3.3.3"):
+            gui.broadcast("hit", {"ip": ip})
+        return [q.get_nowait() for _ in range(q.qsize())]
+
+    got = asyncio.run(run())
+    assert [e["ip"] for e in got] == ["2.2.2.2", "3.3.3.3"]
+    assert all(e["type"] == "hit" for e in got)
+    store.close()
+
+
+def test_gui_refuses_open_bind_without_auth(tmp_path):
+    from cf.gui import RedveilGUI
+    from cf.store import Store
+
+    store = Store(str(tmp_path / "g.db"))
+    try:
+        RedveilGUI(store, host="0.0.0.0", auth=False)._require_local_auth()
+    except ValueError as exc:
+        assert "auth" in str(exc)
+    else:
+        raise AssertionError("routable bind without auth was accepted")
+    # loopback without auth and routable with auth both stay legal
+    RedveilGUI(store, host="127.0.0.1", auth=False)._require_local_auth()
+    RedveilGUI(store, host="0.0.0.0", auth=True)._require_local_auth()
+    store.close()
+
+
+def test_gui_html_wires_live_stream():
+    from cf.gui import GUI_HTML
+
+    html = GUI_HTML.read_text(encoding="utf-8")
+    assert "EventSource" in html
+    assert "/api/events" in html
+    assert "/status" in html

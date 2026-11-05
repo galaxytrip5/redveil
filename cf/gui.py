@@ -8,6 +8,7 @@ import logging
 import secrets
 import time
 import webbrowser
+from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +51,13 @@ class RedveilGUI:
         self._site: Any = None
         self._landing: LandingServer | None = None
         self._landing_task: Any = None
+        # live server mode: one bounded queue per open event stream, a hit
+        # pump that sleeps while nobody watches, dedupe across its window
+        self._subs: set[asyncio.Queue[dict[str, Any]]] = set()
+        self._pump_task: Any = None
+        self._started_at = 0.0
+        self._seen: set[str] = set()
+        self._seen_q: deque[str] = deque()
 
     # ─── auth ───
     def _check_token(self, request: Any) -> bool:
@@ -67,6 +75,124 @@ class RedveilGUI:
     # the event loop, or one commit stalls every dashboard request
     async def _store(self, fn: Any, *args: Any, **kwargs: Any) -> Any:
         return await asyncio.to_thread(fn, *args, **kwargs)
+
+    # ─── live events (sse) ───
+    # a slow viewer drops its oldest event instead of stalling the pump or
+    # whichever handler happens to broadcast into its queue
+    def broadcast(self, kind: str, data: dict[str, Any] | None = None) -> None:
+        if not self._subs:
+            return
+        evt: dict[str, Any] = {"type": kind, "ts": time.time()}
+        if data:
+            evt.update(data)
+        for q in list(self._subs):
+            try:
+                q.put_nowait(evt)
+            except asyncio.QueueFull:
+                try:
+                    q.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+                try:
+                    q.put_nowait(evt)
+                except asyncio.QueueFull:
+                    pass
+
+    async def _pump(self) -> None:
+        # zero store work while no stream is open; one scan per second while
+        # a dashboard is watching
+        while True:
+            if not self._subs:
+                await asyncio.sleep(0.5)
+                continue
+            try:
+                await self._scan_hits()
+            except Exception:  # noqa: BLE001
+                LOG.debug("hit pump failed", exc_info=True)
+            await asyncio.sleep(1.0)
+
+    async def _scan_hits(self) -> None:
+        # 5s overlap plus dedupe keys: a hit inside the window broadcasts
+        # once, and the seen set is capped so a long session stays flat
+        cutoff = time.time() - 5.0
+        camps = await self._store(self.store.list_campaigns)
+        for camp in camps[:200]:
+            for hit in await self._store(
+                self.store.campaign_hits_since, camp["id"], cutoff
+            ):
+                key = "|".join(
+                    str(hit.get(k, ""))
+                    for k in ("token", "kind", "created_at", "ip")
+                )
+                if key in self._seen:
+                    continue
+                if len(self._seen) >= 512:
+                    self._seen.discard(self._seen_q.popleft())
+                self._seen.add(key)
+                self._seen_q.append(key)
+                self.broadcast(
+                    "hit",
+                    {
+                        "campaign": camp["name"],
+                        "token": str(hit.get("token", "")),
+                        "kind": str(hit.get("kind", "")),
+                        "ip": str(hit.get("ip", "")),
+                        "ua": str(hit.get("ua", ""))[:80],
+                        "hit_ts": float(hit.get("created_at") or 0),
+                    },
+                )
+
+    async def api_events(self, request: Any) -> Any:
+        from aiohttp import web
+
+        resp = web.StreamResponse(status=200)
+        resp.content_type = "text/event-stream"
+        resp.headers["Cache-Control"] = "no-cache"
+        resp.headers["X-Accel-Buffering"] = "no"
+        await resp.prepare(request)
+        q: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=256)
+        self._subs.add(q)
+        try:
+            await resp.write(b": connected\n\n")
+            while True:
+                try:
+                    evt = await asyncio.wait_for(q.get(), timeout=15.0)
+                except asyncio.TimeoutError:
+                    # comment frames keep proxies and idle timers honest
+                    await resp.write(b": ping\n\n")
+                    continue
+                await resp.write(
+                    f"data: {json.dumps(evt, separators=(',', ':'))}\n\n"
+                    .encode()
+                )
+        except (ConnectionResetError, ConnectionError, RuntimeError):
+            pass
+        except asyncio.CancelledError:
+            # server shutdown — the finally below still detaches the queue
+            raise
+        finally:
+            self._subs.discard(q)
+        return resp
+
+    async def api_status(self, request: Any) -> Any:
+        from . import __version__
+
+        now = time.time()
+        return _json(
+            {
+                "version": __version__,
+                "host": self.host,
+                "port": self.port,
+                "auth": self.auth,
+                "uptime": (
+                    round(now - self._started_at, 1) if self._started_at else 0.0
+                ),
+                "landing": "up" if self._landing else "down",
+                "landing_port": self._landing.port if self._landing else None,
+                "viewers": len(self._subs),
+                "server_time": now,
+            }
+        )
 
     # ─── api handlers ───
     async def api_overview(self, request: Any) -> Any:
@@ -151,6 +277,7 @@ class RedveilGUI:
                 base_url=str(body.get("base_url", "")),
                 meta=meta,
             )
+            self.broadcast("campaign", {"id": cid, "name": name})
             return _json({"id": cid, "name": name}, 201)
         rows = []
         for camp in await self._store(self.store.list_campaigns):
@@ -233,6 +360,7 @@ class RedveilGUI:
             token = await self._store(
                 self.store.add_target, cid, email=email, label=label
             )
+            self.broadcast("target", {"campaign_id": cid, "token": token})
             return _json({"token": token}, 201)
         cid = request.query.get("campaign_id", "")
         if not cid:
@@ -283,6 +411,7 @@ class RedveilGUI:
                 if self._landing is not None:
                     await self._landing.stop()
                     self._landing = None
+                self.broadcast("serve", {"landing": "down"})
                 return _json({"landing": "stopped"})
             if self._landing is not None:
                 return _json(
@@ -298,6 +427,7 @@ class RedveilGUI:
             )
             await landing.start()
             self._landing = landing
+            self.broadcast("serve", {"landing": "up", "port": port})
             return _json({"landing": "up", "port": port}, 201)
         return _json(
             {
@@ -318,11 +448,13 @@ class RedveilGUI:
                     p = save(str(body.get("key", "")))
                 except LicenseError as exc:
                     return _json({"error": str(exc)}, 400)
+                self.broadcast("license", {"action": "activate"})
                 return _json({"activated": True, "path": str(p)})
             if action == "deactivate":
                 from .license import deactivate
 
                 deactivate()
+                self.broadcast("license", {"action": "deactivate"})
                 return _json({"deactivated": True})
         lic = load()
         if lic is None:
@@ -389,9 +521,22 @@ class RedveilGUI:
         app.router.add_get("/api/license", self.api_license)
         app.router.add_post("/api/license", self.api_license)
         app.router.add_get("/api/report/{cid}", self.api_report)
+        app.router.add_get("/api/events", self.api_events)
+        app.router.add_get("/api/status", self.api_status)
         return app
 
+    def _require_local_auth(self) -> None:
+        # server-mode rule: an unauthenticated console is loopback-only —
+        # --no-auth on a routable bind would expose every campaign in the db
+        if self.auth or self.host in ("127.0.0.1", "::1", "localhost"):
+            return
+        raise ValueError(
+            f"refusing to bind {self.host} without auth — drop --no-auth "
+            "or keep --host 127.0.0.1"
+        )
+
     async def start(self, open_browser: bool = True) -> None:
+        self._require_local_auth()
         if self._runner is not None:
             # a second start() must not orphan the first bound site
             await self.stop()
@@ -409,6 +554,10 @@ class RedveilGUI:
             self._site = None
             raise
         url = self._url()
+        self._started_at = time.time()
+        self._seen.clear()
+        self._seen_q.clear()
+        self._pump_task = asyncio.create_task(self._pump())
         print(f"[+] redveil gui -> {url}")
         if self.auth:
             print(f"    token: {self.token}")
@@ -422,6 +571,16 @@ class RedveilGUI:
         return base
 
     async def stop(self) -> None:
+        # ordered teardown: pump first (it reads the store and feeds the
+        # queues), then the viewers, then the landing server, then the site
+        if self._pump_task is not None:
+            self._pump_task.cancel()
+            try:
+                await self._pump_task
+            except asyncio.CancelledError:
+                pass
+            self._pump_task = None
+        self._subs.clear()
         if self._landing is not None:
             await self._landing.stop()
             self._landing = None
