@@ -1,5 +1,8 @@
 # redveil
 
+[![CI](https://github.com/galaxytrip5/redveil/actions/workflows/ci.yml/badge.svg)](https://github.com/galaxytrip5/redveil/actions/workflows/ci.yml)
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
+
 ClickFix lures, legit-service C2, SaaS delivery and initial-access tooling for
 red-team engagements. Python 3.11+, single SQLite store, one pooled async HTTP
 client, no mandatory external services.
@@ -51,7 +54,7 @@ is exercised through fake transports (`tests/test_http.py`).
 | `cf/c2.py`, `cf/delivery.py`, `cf/chain.py` | legit-service C2, SaaS notification delivery, AiTM token chain |
 | `cf/ext.py`, `cf/relay.py`, `cf/payload.py` | Chrome MV3 extension C2, cloud relay codegen, payload factory |
 | `cf/techniques.py` | technique catalog logic — rows live in `cf/data/techniques.json`, parsed on first use, `validate()` in the test suite |
-| `cf/generator.py`, `cf/cmds_generate.py` | category-pack generator — packs in `cf/data/categories/*.json`, deterministic seed, `redveil-pro` seam for premium packs + exploit chains |
+| `cf/generator.py`, `cf/cmds_generate.py` | category-pack generator — built-in packs in `cf/data/categories/*.json`, user template packs in `~/.clickfix/packs` (same schema, same validation; a same-id user pack shadows the builtin) or `--pack-dir DIR`, deterministic seed, one `mail-{n}.eml` draft per variant, `redveil-pro` seam for premium packs + exploit chains |
 | `cf/access.py`, `cf/creds.py`, `cf/lateral.py`, `cf/collect.py`, `cf/opsec.py` | apt module builders (collection + exfil snippets live in `cf/collect.py`) behind the `cmds_apt` commands |
 | `cf/report.py`, `cf/gui.py` | funnel report/CSV/Sigma export and the local dashboard (`cf/gui.html`) |
 | `cf/license.py` | signed license tiers, quotas, demo watermark |
@@ -84,8 +87,9 @@ Edit the JSON directly. The suite validates technique rows against `KINDS`
 | team (365d) | unlimited | unlimited | + multi-seat | no |
 
 `0` means unlimited. Feature gates (`require_feature`): `report --csv`,
-`technique export --sigma`, `ext`, `relay`, `payload`. Keys are offline-signed,
-prefix `CFIX1` — terms in `EULA.md`, commercial notes in `SELLING.md`.
+`technique export --sigma`, `ext`, `relay`, `payload`. Keys are offline-signed
+Ed25519, prefix `CFIX2` (old `CFIX1` keys fail closed) — terms in `EULA.md`,
+commercial notes in `SELLING.md`.
 
 ```bash
 python redveil.py license status
@@ -109,6 +113,7 @@ Secrets resolve in order: flag → env → piped stdin (non-tty) → prompt.
 
 ## Docs
 
+- `LICENSE` — GPL-3.0
 - `EULA.md` — license terms
 - `SELLING.md` — commercial notes
 - `TODOS.md` — open work
