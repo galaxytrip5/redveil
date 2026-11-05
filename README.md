@@ -60,7 +60,7 @@ Create a virtual environment and install the development dependencies:
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate     # Windows: .venv\Scripts\activate
+source .venv/bin/activate     # Windows: .venv\\Scripts\\activate
 python -m pip install -e ".[dev]"
 ```
 
@@ -71,6 +71,10 @@ pytest
 ```
 
 Tests are intended to run offline by default. The HTTP tests use fake transports rather than opening network connections.
+
+## Topics
+
+For readers exploring defensive and authorized security work, this project relates to **security validation**, **authorized red-team exercises**, **purple teaming**, **defensive security research**, **detection engineering**, **security-awareness simulations**, **Python security tooling**, **local-first applications**, **SQLite**, and **automated testing**. These terms describe the project’s context; they do not replace the requirement for written authorization and a clearly defined test scope.
 
 ## Documentation
 
