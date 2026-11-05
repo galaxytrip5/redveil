@@ -1147,6 +1147,9 @@ def test_write_bundle_renders_lures(tmp_path):
         "lure-1.html",
         "lure-2.html",
         "lure-3.html",
+        "mail-1.eml",
+        "mail-2.eml",
+        "mail-3.eml",
     }
     html = (tmp_path / "out" / "lure-1.html").read_text(encoding="utf-8")
     assert "</html>" in html

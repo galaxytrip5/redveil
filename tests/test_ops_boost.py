@@ -1,10 +1,13 @@
 # language: Python 3.11+, file: tests/test_ops_boost.py
-# *no external network — capture surface: store, smtp relay, evilginx-lite proxy*
+# *no external network — capture surface: store, smtp relay, evilginx-lite proxy,
+# template packs*
 import asyncio
+import json
 import socket
 import threading
 import time
 from email.message import EmailMessage
+from pathlib import Path
 
 import pytest
 
@@ -334,3 +337,139 @@ def test_gui_routes_timeline(tmp_path):
     routes = {r.resource.canonical for r in app.router.routes()}
     assert "/api/campaigns/{cid}/timeline" in routes
     store.close()
+
+
+# ─── template packs (user editable) ───
+
+
+@pytest.fixture(autouse=True)
+def _pack_cache_reset():
+    """Pack resolution is cached per module — different tmp roots reuse ids
+    across tests, so the cache must not leak between them."""
+    from cf import generator as gen
+
+    gen._load_core.cache_clear()
+    yield
+    gen._load_core.cache_clear()
+
+
+_PACK_SKELETON = """{
+  "id": "mytemplate",
+  "label": "Template personnalisé",
+  "persona": {
+    "brand": "UserBrand",
+    "voice": "support",
+    "urgency": "high",
+    "lexicon": ["colis"]
+  },
+  "scenarios": ["delivery"],
+  "channels": {"email": {"subject": "ref {ref}", "body": "{name} — {lure}"}},
+  "context": {"inject": ["ref"]},
+  "techniques": {"surfaces": ["winr"], "min_reliability": 4},
+  "payload": {"collect": ["browser"], "exfil": "http", "jitter": 0.2},
+  "opsec": {"dwell_hours": 1, "variant_count": 1},
+  "chain": ["lure", "stager", "stage2", "collect", "exfil"],
+  "exploits": ["motw-lnk"]
+}
+"""
+
+
+def test_user_template_pack_dir(tmp_path, monkeypatch):
+    from cf import generator as gen
+
+    user_dir = tmp_path / "u_packs"
+    user_dir.mkdir()
+    (user_dir / "mytemplate.json").write_text(_PACK_SKELETON, encoding="utf-8")
+    monkeypatch.setattr(gen, "USER_PACK_DIR", user_dir)
+    assert "mytemplate" in gen.list_packs()
+    bundle = gen.generate("mytemplate", seed=5)
+    assert bundle["label"] == "Template personnalisé"
+    assert bundle["variants"][0]["body"].endswith("https://HOST")
+
+
+def test_user_pack_shadows_builtin(tmp_path, monkeypatch):
+    """Template mode: a same-id user pack overrides the builtin — edit the
+    shipped copy, not the library."""
+    from cf import generator as gen
+
+    user_dir = tmp_path / "u_packs"
+    user_dir.mkdir()
+    shadow = json.loads(
+        (Path(gen.CATEGORY_DIR) / "colis.json").read_text(encoding="utf-8")
+    )
+    shadow["label"] = "SHADOWED-COPY"
+    (user_dir / "colis.json").write_text(
+        json.dumps(shadow, ensure_ascii=False), encoding="utf-8"
+    )
+    monkeypatch.setattr(gen, "USER_PACK_DIR", user_dir)
+    assert gen.load_pack("colis")["label"] == "SHADOWED-COPY"
+    assert gen.list_packs().count("colis") == 1
+
+
+def test_user_pack_invalid_fails_closed(tmp_path, monkeypatch):
+    from cf import generator as gen
+
+    user_dir = tmp_path / "u_packs"
+    user_dir.mkdir()
+    (user_dir / "broken.json").write_text('{"id": "broken"}', encoding="utf-8")
+    monkeypatch.setattr(gen, "USER_PACK_DIR", user_dir)
+    assert "broken" in gen.list_packs()
+    with pytest.raises(ValueError):
+        gen.generate("broken", seed=1)
+
+
+def test_pack_dir_flag_shadows_everything(tmp_path):
+    """--pack-dir wins over the user dir and builtins, and list_packs sees it."""
+    from cf import generator as gen
+
+    extra = tmp_path / "x_packs"
+    extra.mkdir()
+    (extra / "extrapack.json").write_text(
+        _PACK_SKELETON.replace('"id": "mytemplate"', '"id": "extrapack"'),
+        encoding="utf-8",
+    )
+    try:
+        gen.set_pack_dir(extra)
+        assert "extrapack" in gen.list_packs(extra)
+        bundle = gen.generate("extrapack", seed=2)
+        assert bundle["persona"]["brand"] == "UserBrand"
+    finally:
+        gen.set_pack_dir(None)
+    assert "extrapack" not in gen.list_packs()
+
+
+def test_new_packs_validate_and_generate():
+    from cf import generator as gen
+
+    for pack_id in ("laposte", "tools"):
+        assert pack_id in gen.list_packs()
+        bundle = gen.generate(pack_id, seed=11)
+        assert bundle["variants"], pack_id
+        assert bundle["persona"]["brand"], pack_id
+
+
+def test_write_bundle_emits_mail_artifacts(tmp_path):
+    from cf import generator as gen
+
+    bundle = gen.generate("laposte", seed=3, base_url="https://phish.tld")
+    written = gen.write_bundle(bundle, tmp_path)
+    mail = tmp_path / "mail-1.eml"
+    assert mail.is_file()
+    text_mail = mail.read_text(encoding="utf-8")
+    assert "Subject: " in text_mail
+    assert "https://phish.tld" in text_mail
+    assert "lure-1.html" in written
+
+
+def test_cli_generate_pack_dir(tmp_path):
+    from cf.cli import Cli
+
+    db = str(tmp_path / "g.db")
+    extra = tmp_path / "p"
+    extra.mkdir()
+    (extra / "mytemplate.json").write_text(_PACK_SKELETON, encoding="utf-8")
+    assert Cli(["--db", db, "generate", "list"]).run() == 0
+    assert Cli(["--db", db, "generate", "mytemplate",
+                "--pack-dir", str(extra), "--seed", "4"]).run() == 0
+    assert Cli(["--db", db, "generate", "my-template-typo",
+                "--pack-dir", str(extra)]).run() == 1

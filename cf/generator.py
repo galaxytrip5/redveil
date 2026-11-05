@@ -17,6 +17,10 @@ from .util import write_text
 
 CATEGORY_DIR = Path(__file__).resolve().parent / "data" / "categories"
 
+#: user template packs — drop a validated pack JSON here and it rides
+#: `generate list`; same id as a builtin pack shadows the builtin
+USER_PACK_DIR = Path.home() / ".clickfix" / "packs"
+
 #: every placeholder a pack template may use — generate() fills all of them
 CTX_KEYS: frozenset[str] = frozenset({
     "brand", "name", "first", "city", "tracking", "ref", "amount",
@@ -101,8 +105,12 @@ def _chains() -> dict[str, dict[str, str]]:
     return chains
 
 
-def list_packs() -> list[str]:
+def list_packs(extra: Path | None = None) -> list[str]:
     ids = {p.stem for p in CATEGORY_DIR.glob("*.json")}
+    if USER_PACK_DIR.is_dir():
+        ids |= {p.stem for p in USER_PACK_DIR.glob("*.json")}
+    if extra is not None:
+        ids |= {p.stem for p in extra.glob("*.json")}
     for pro_dir in _pro_pack_dirs():
         ids |= {p.stem for p in pro_dir.glob("*.json")}
     return sorted(ids)
@@ -180,18 +188,45 @@ def _validate(spec: dict[str, Any], pack_id: str) -> None:
 
 
 @cache
-def load_pack(pack_id: str) -> dict[str, Any]:
-    """Read + validate one pack — unknown or malformed ids fail closed."""
+def _load_core(pack_id: str) -> dict[str, Any] | None:
+    """Resolve a pack id across discovery roots — validated identically
+    everywhere; the first hit wins (extra dir > user dir > builtin > pro)."""
     if not pack_id or not all(c in _ID_CHARS for c in pack_id):
-        raise FileNotFoundError(f"unknown pack: {pack_id}")
-    for base in (CATEGORY_DIR, *_pro_pack_dirs()):
+        return None
+    bases: list[Path] = list(_EXTRA_BASES)
+    if USER_PACK_DIR.is_dir():
+        bases.append(USER_PACK_DIR)
+    bases.append(CATEGORY_DIR)
+    bases.extend(b for b in _pro_pack_dirs() if b not in bases)
+    for base in bases:
         path = base / f"{pack_id}.json"
         if path.is_file():
             with path.open(encoding="utf-8") as fh:
                 spec: dict[str, Any] = json.load(fh)
             _validate(spec, pack_id)
             return spec
-    raise FileNotFoundError(f"unknown pack: {pack_id}")
+    return None
+
+
+_EXTRA_BASES: list[Path] = []
+
+
+def set_pack_dir(path: str | Path | None) -> None:
+    """One-shot extra pack root — CLI --pack-dir. Cleared by passing None.
+    Highest precedence: a pack here shadows the user dir and builtins."""
+    global _EXTRA_BASES
+    _EXTRA_BASES = [Path(path)] if path else []
+    _load_core.cache_clear()
+
+
+def load_pack(pack_id: str) -> dict[str, Any]:
+    """Read + validate one pack — unknown or malformed ids fail closed."""
+    if not pack_id or not all(c in _ID_CHARS for c in pack_id):
+        raise FileNotFoundError(f"unknown pack: {pack_id}")
+    spec = _load_core(pack_id)
+    if spec is None:
+        raise FileNotFoundError(f"unknown pack: {pack_id}")
+    return spec
 
 
 def select_techniques(pack: dict[str, Any], limit: int = 3) -> list[Any]:
@@ -372,7 +407,8 @@ def generate(
 
 
 def write_bundle(bundle: dict[str, Any], out_dir: str | Path) -> dict[str, str]:
-    """Drop bundle.json + one rendered lure per variant into out_dir."""
+    """Drop bundle.json, one rendered lure and one mail draft per variant
+    into out_dir."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     written: dict[str, str] = {
@@ -393,4 +429,19 @@ def write_bundle(bundle: dict[str, Any], out_dir: str | Path) -> dict[str, str]:
         )
         name = f"lure-{v['n']}.html"
         written[name] = write_text(str(out / name), html)
+        written[f"mail-{v['n']}.eml"] = write_text(
+            str(out / f"mail-{v['n']}.eml"),
+            "\n".join(
+                (
+                    f"From: {brand} <no-reply@{brand.lower()}.example>",
+                    "To: <recipient>",
+                    f"Subject: {v['subject']}".replace("\n", " "),
+                    "MIME-Version: 1.0",
+                    "Content-Type: text/plain; charset=UTF-8",
+                    "",
+                    str(v["body"]),
+                )
+            )
+            + "\n",
+        )
     return written

