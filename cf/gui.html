@@ -182,6 +182,11 @@ kbd { background: var(--surface-2); border: 1px solid var(--line-2); border-radi
 .ctl-row { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; }
 .ctl-row .field { max-width: 160px; flex: 0 0 auto; }
 .status-line { margin-top: 14px; font-size: 13px; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.tl-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }
+.tl-row { display: flex; align-items: baseline; gap: 10px; padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,.04); font-size: 12px; }
+.tl-ic { width: 18px; text-align: center; flex: 0 0 auto; }
+.tl-ts { flex: 0 0 130px; }
+.tl-pay { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ─── tables ─── */
 .tbl { overflow-x: auto; }
@@ -359,6 +364,8 @@ tr.flash { animation: flash .9s ease; }
         <tbody id="cd-targets"></tbody>
       </table>
     </div>
+    <div class="panel-head" style="margin-top:20px;"><h2>Timeline</h2><span class="chip" id="tl-count">0</span></div>
+    <div id="cd-timeline" class="tl-list"><p class="dim sm">no activity yet</p></div>
     <div class="panel-foot">
       <button class="btn ghost" onclick="dlReport('md')">↓ Report .md</button>
       <button class="btn ghost" onclick="dlReport('csv')">↓ Timeline .csv</button>
@@ -683,7 +690,37 @@ async function openCamp(cid, silent) {
         </span></td></tr>`;
     }).join('');
     $('cd-targets').innerHTML = rows || emptyRow(5, 'no targets — add one above');
+    loadTimeline(cid);
     if (!silent) $('camp-detail').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (e) { if (!silent) toast(e.message, 'err'); }
+}
+function tlIcon(kind) {
+  if (kind.startsWith('stager:')) return '⌁';           // stager pull
+  if (kind.startsWith('oauth')) return '⚿';             // consent relay
+  if (kind.startsWith('smtp:')) return '✉';             // inbox delivery
+  if (kind.startsWith('proxy:')) return '⇄';            // evilginx capture
+  return { lure: '🎣', pixel: '👁', hit: '⚡' }[kind] || '·';
+}
+async function loadTimeline(cid, silent) {
+  try {
+    const r = await api(`/campaigns/${encodeURIComponent(cid)}/timeline`);
+    if (!r.ok) return;
+    const d = await r.json().catch(() => ({ timeline: [] }));
+    const rows = (d.timeline || []).map(e => {
+      const when = new Date((e.ts || 0) * 1000);
+      const hh = when.toLocaleString(undefined, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const who = e.email ? esc(e.email) : (e.token ? `<span class="mono">${esc(e.token)}</span>` : '<span class="dim">—</span>');
+      const payload = e.payload ? esc(e.payload.slice(0, 160)) : '';
+      return `<div class="tl-row">
+        <span class="tl-ic">${tlIcon(e.kind)}</span>
+        <span class="mono dim sm tl-ts">${esc(hh)}</span>
+        <span class="chip sm">${esc(e.kind)}</span>
+        <span class="sm">${who}</span>
+        <span class="mono dim sm tl-pay">${payload}</span>
+      </div>`;
+    }).join('');
+    $('tl-count').textContent = String((d.timeline || []).length);
+    $('cd-timeline').innerHTML = rows || '<p class="dim sm">no activity yet</p>';
   } catch (e) { if (!silent) toast(e.message, 'err'); }
 }
 async function addTarget() {
@@ -837,6 +874,7 @@ function setLive(mode) {
 function handleEvent(evt) {
   if (evt.type === 'hit') {
     pushHit({ ts: evt.hit_ts || evt.ts, campaign: evt.campaign, token: evt.token, kind: evt.kind, ip: evt.ip });
+    if (currentCamp && evt.campaign === currentCamp) loadTimeline(currentCamp, true);
   }
   scheduleRefresh();
 }

@@ -50,6 +50,11 @@ CREATE TABLE IF NOT EXISTS beacons (
     state        TEXT NOT NULL DEFAULT 'created',
     updated_at   REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS send_profiles (
+    name     TEXT PRIMARY KEY,
+    config   TEXT NOT NULL DEFAULT '{}',
+    created_at REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS hits (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     token        TEXT NOT NULL,
@@ -516,3 +521,94 @@ class Store:
             "last_events": self.events(camp["id"], 10),
             "last_hits": [dict(r) for r in recent],
         }
+
+    def timeline(self, campaign_id: str, limit: int = 300) -> list[dict[str, Any]]:
+        """Gophish-style per-campaign feed — hits and events merged into one
+        stream, newest first, each row tagged with the target it belongs to.
+        Bounded both by SQL LIMIT and a hard ceiling on the limit argument."""
+        camp = self.get_campaign(campaign_id)
+        if not camp:
+            return []
+        cap = max(1, min(limit, 500))
+        rows = self._all(
+            "SELECT h.token, h.kind, h.ip, h.ua, h.extra, h.created_at "
+            "FROM hits h JOIN targets t ON t.token = h.token "
+            "WHERE t.campaign_id=? ORDER BY h.id DESC LIMIT ?",
+            (camp["id"], cap),
+        )
+        feed: list[dict[str, Any]] = [
+            {
+                "ts": float(r["created_at"]),
+                "kind": str(r["kind"]),
+                "source": "hit",
+                "token": str(r["token"]),
+                "ip": str(r["ip"]),
+                "ua": str(r["ua"]),
+                "payload": str(r["extra"] or ""),
+            }
+            for r in rows
+        ]
+        for r in self._all(
+            "SELECT beacon_id, kind, payload, created_at FROM events "
+            "WHERE campaign_id=? ORDER BY id DESC LIMIT ?",
+            (camp["id"], cap),
+        ):
+            feed.append(
+                {
+                    "ts": float(r["created_at"]),
+                    "kind": str(r["kind"]),
+                    "source": "event",
+                    "token": "",
+                    "ip": "",
+                    "ua": "",
+                    "payload": str(r["payload"] or ""),
+                }
+            )
+        feed.sort(key=lambda e: e["ts"], reverse=True)
+        feed = feed[:cap]
+        identities = {t["token"]: t for t in self.targets(camp["id"])}
+        for e in feed:
+            tgt = identities.get(e["token"])
+            e["email"] = str(tgt["email"]) if tgt else ""
+            e["label"] = str(tgt["label"]) if tgt else ""
+            e["status"] = str(tgt["status"]) if tgt else ""
+        return feed
+
+    # ─── sending profiles (smtp) ───
+    def set_send_profile(self, name: str, config: dict[str, Any]) -> None:
+        if not name.strip():
+            raise ValueError("profile name must not be empty")
+        with self._tx() as c:
+            c.execute(
+                "INSERT INTO send_profiles (name, config, created_at) "
+                "VALUES (?,?,?) "
+                "ON CONFLICT(name) DO UPDATE SET config=excluded.config",
+                (name, json.dumps(config, ensure_ascii=False), time.time()),
+            )
+
+    def get_send_profile(self, name: str) -> dict[str, Any] | None:
+        row = self._find(
+            "SELECT config FROM send_profiles WHERE name=?", (name,)
+        )
+        if not row:
+            return None
+        try:
+            config = json.loads(str(row["config"]))
+        except ValueError:
+            return None
+        return config if isinstance(config, dict) else None
+
+    def list_send_profiles(self) -> list[dict[str, Any]]:
+        return [
+            {"name": str(r["name"]), "config": json.loads(str(r["config"]))}
+            for r in self._all(
+                "SELECT name, config FROM send_profiles ORDER BY name"
+            )
+        ]
+
+    def remove_send_profile(self, name: str) -> bool:
+        with self._tx() as c:
+            cur = c.execute(
+                "DELETE FROM send_profiles WHERE name=?", (name,)
+            )
+        return cur.rowcount > 0

