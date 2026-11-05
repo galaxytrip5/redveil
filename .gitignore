@@ -18,6 +18,11 @@ build/
 dist/
 *.egg-info/
 
+# keys and env files — never committable
+*.key
+*.pem
+.env
+
 # local dbs + bytecode autopsies from the AV incident
 stager_dis.txt
 
