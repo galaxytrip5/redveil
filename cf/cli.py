@@ -101,6 +101,7 @@ class Cli(
             "access": self.cmd_access,
             "creds": self.cmd_creds,
             "lateral": self.cmd_lateral,
+            "persist": self.cmd_persist,
             "collect": self.cmd_collect,
             "exfil": self.cmd_exfil,
             "opsec": self.cmd_opsec,

@@ -131,13 +131,18 @@ class SmtpSender:
                 f"batch capped at {self.MAX_PER_SESSION} messages per session"
             )
         outcome: dict[str, bool] = {}
-        with self._connect() as client:
-            for to, msg in messages:
-                try:
-                    client.send_message(msg, from_addr=self._from_addr())
-                    outcome[to] = True
-                except (smtplib.SMTPException, OSError):
-                    outcome[to] = False
+        try:
+            with self._connect() as client:
+                for to, msg in messages:
+                    try:
+                        client.send_message(msg, from_addr=self._from_addr())
+                        outcome[to] = True
+                    except (smtplib.SMTPException, OSError):
+                        outcome[to] = False
+        except (smtplib.SMTPException, OSError):
+            # dead relay — fail closed: every message marked undelivered,
+            # no partial state, no exception up to the CLI
+            return {to: False for to, _ in messages}
         return outcome
 
     def _from_addr(self) -> str:

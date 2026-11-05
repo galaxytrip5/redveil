@@ -211,21 +211,16 @@ class DeliveryCommands:
         self.store.set_send_profile(name, profile.to_config())
         ok(f"profile saved: {name} ({profile.host}:{profile.port} {profile.tls})")
 
-    def _deliver_smtp(self) -> None:
-        from .smtp_send import SmtpProfile, SmtpSender, build_message
+    def _smtp_profile(self, name: str) -> tuple[Any, str]:
+        """Profile precedence: saved --profile name > --host one-shot.
+        Password resolves like every secret: flag → env → prompt."""
+        from .smtp_send import SmtpProfile
 
-        self._need(3, "deliver smtp <campaign> [--profile P | --host H]")
-        camp = self._campaign(self.pos[2])
-        base = self._base(camp)
-        if not base:
-            raise SystemExit("--url required (or set it on the campaign)")
-        name = str(self.flags.get("profile", ""))
-        profile: SmtpProfile | None = None
         if name:
             config = self.store.get_send_profile(name)
             if not config:
                 raise SystemExit(f"no such profile: {name}")
-            profile = SmtpProfile.from_config(config)
+            profile: SmtpProfile = SmtpProfile.from_config(config)
         else:
             host = str(self.flags.get("host", ""))
             if not host:
@@ -240,6 +235,17 @@ class DeliveryCommands:
         password = resolve_secret(
             str(self.flags.get("pass", "")), "CF_SMTP_PASS", "smtp password: "
         )
+        return profile, password
+
+    def _deliver_smtp(self) -> None:
+        from .smtp_send import SmtpProfile, resolve_profile
+
+        self._need(3, "deliver smtp <campaign> [--profile P | --host H]")
+        camp = self._campaign(self.pos[2])
+        base = self._base(camp)
+        if not base:
+            raise SystemExit("--url required (or set it on the campaign)")
+        profile, password = self._smtp_profile(str(self.flags.get("profile", "")))
         subject = str(
             self.flags.get(
                 "subject", "{label}: shared document requires your approval"
@@ -262,6 +268,25 @@ class DeliveryCommands:
             rows = [t for t in rows if t["token"] in only]
         if not rows:
             raise SystemExit("no targets")
+        self._smtp_dispatch(
+            profile, password, camp, base, rows, subject, message, fields
+        )
+
+    def _smtp_dispatch(
+        self,
+        profile: Any,
+        password: str,
+        camp: dict[str, Any],
+        base: str,
+        rows: list[dict[str, Any]],
+        subject: str,
+        message: str,
+        fields: dict[str, Any],
+    ) -> dict[str, bool]:
+        """One smtp blast to `rows` — shared by deliver smtp and campaign
+        launch. Returns {email: delivered}."""
+        from .smtp_send import SmtpSender, build_message
+
         sender = SmtpSender(profile, password)
         batch: list[tuple[str, Any]] = []
         tokens: list[str] = []
@@ -270,7 +295,7 @@ class DeliveryCommands:
             url = f"{base}/l/{token}"
             label = t["label"] or t["email"] or "file"
             body = str(message).format(label=label, url=url, token=token, **fields)
-            subj = subject.format(label=label, url=url, token=token, **fields)
+            subj = str(subject).format(label=label, url=url, token=token, **fields)
             batch.append(
                 (
                     str(t["email"]),
@@ -294,6 +319,7 @@ class DeliveryCommands:
                 token, camp["id"], "smtp:" + ("ok" if delivered else "fail"), to
             )
         ok(f"smtp delivery: {sum(outcome.values())}/{len(outcome)} sent")
+        return outcome
 
     # ─── c2 beacon ───
 

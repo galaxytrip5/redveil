@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import secrets
+import shutil
 import time
 import webbrowser
 from collections import deque
@@ -13,6 +15,8 @@ from pathlib import Path
 from typing import Any
 
 from .license import LicenseError, effective, load, save
+
+USER_PREVIEW_DIR = Path.home() / ".clickfix" / "packs" / ".preview"
 from .server import LandingServer
 from .store import Store
 from .techniques import TECHNIQUES
@@ -454,6 +458,106 @@ class RedveilGUI:
             }
         )
 
+    async def api_packs(self, request: Any) -> Any:
+        """Template-pack editor: list, read raw, save validated with a
+        one-variant preview. Save runs the same validation as load_pack —
+        a rejected pack lands in no library and leaves no file."""
+        from .generator import (
+            CATEGORY_DIR,
+            USER_PACK_DIR,
+            generate,
+            list_packs,
+            load_pack,
+        )
+
+        if request.method == "GET":
+            pack_id = request.query.get("id", "")
+            if pack_id:
+                try:
+                    spec = load_pack(pack_id)
+                except (FileNotFoundError, ValueError) as exc:
+                    return _json({"error": str(exc)}, 404)
+                return _json({"pack": spec})
+            return _json(
+                {
+                    "all": list_packs(),
+                    "builtin": sorted(p.stem for p in CATEGORY_DIR.glob("*.json")),
+                    "user_dir": str(USER_PACK_DIR),
+                }
+            )
+        try:
+            body = await request.json()
+        except Exception:  # noqa: BLE001
+            return _json({"error": "invalid json"}, 400)
+        if not isinstance(body, dict):
+            return _json({"error": "pack must be a json object"}, 400)
+        if not re.fullmatch(r"[a-z0-9_-]{1,40}", str(body.get("id", ""))):
+            return _json({"error": "id must match [a-z0-9_-]{1,40}"}, 400)
+        path = USER_PACK_DIR / f"{body['id']}.json"
+        try:
+            USER_PACK_DIR.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                json.dumps(body, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            bundle = generate(str(body["id"]), seed=1, variants=1)
+        except (ValueError, KeyError, TypeError, OSError) as exc:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            return _json({"error": f"pack rejected: {exc}"}, 400)
+        self.broadcast("packs", {"id": body["id"], "action": "saved"})
+        return _json(
+            {
+                "ok": True,
+                "path": str(path),
+                "subject": bundle["variants"][0]["subject"],
+            }
+        )
+
+    async def api_pack_preview(self, request: Any) -> Any:
+        """Render a one-variant lure from an un-saved pack — throwaway dir
+        rides --pack-dir discovery, removed right after; nothing persists."""
+        from .generator import generate, set_pack_dir
+        from .lure import LureBuilder
+
+        try:
+            body = await request.json()
+        except Exception:  # noqa: BLE001
+            return _json({"error": "invalid json"}, 400)
+        if not isinstance(body, dict):
+            return _json({"error": "pack must be a json object"}, 400)
+        if not re.fullmatch(r"[a-z0-9_-]{1,40}", str(body.get("id", ""))):
+            return _json({"error": "id must match [a-z0-9_-]{1,40}"}, 400)
+        tmp_dir = USER_PREVIEW_DIR / body["id"]
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            (tmp_dir / f"{body['id']}.json").write_text(
+                json.dumps(body, ensure_ascii=False), encoding="utf-8"
+            )
+            set_pack_dir(tmp_dir)
+            bundle = generate(str(body["id"]), seed=1, variants=1, base_url="{ORIGIN}")
+        except (ValueError, KeyError, TypeError, OSError) as exc:
+            set_pack_dir(None)
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            return _json({"error": f"pack rejected: {exc}"}, 400)
+        set_pack_dir(None)
+        v = bundle["variants"][0]
+        html = LureBuilder.render(
+            v["scenario"],
+            token=v["token"],
+            command=v["command"],
+            continue_url=bundle["continue_url"],
+            locale=bundle["locale"],
+            brand=str(bundle["persona"].get("brand", "")),
+        )
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        from aiohttp import web
+
+        return web.Response(text=html, content_type="text/html")
+
     async def api_license(self, request: Any) -> Any:
         if request.method == "POST":
             try:
@@ -531,6 +635,9 @@ class RedveilGUI:
         app.router.add_post("/api/campaigns", self.api_campaigns)
         app.router.add_get("/api/campaigns/{cid}", self.api_campaign_detail)
         app.router.add_get("/api/campaigns/{cid}/timeline", self.api_timeline)
+        app.router.add_get("/api/packs", self.api_packs)
+        app.router.add_post("/api/packs", self.api_packs)
+        app.router.add_post("/api/packs/preview", self.api_pack_preview)
         app.router.add_get("/api/targets", self.api_targets)
         app.router.add_post("/api/targets", self.api_targets)
         app.router.add_get("/api/techniques", self.api_techniques)

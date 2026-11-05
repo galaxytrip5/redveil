@@ -6,13 +6,148 @@ import json
 
 from pathlib import Path
 
-from .cli_core import _exit_on, _render_kv, _render_table, err, ok, text
-from .util import c_bold, c_cyan, c_dim, c_gray, c_green, c_yellow, write_text
+from .cli_core import (
+    _exit_on,
+    _num,
+    _render_kv,
+    _render_table,
+    err,
+    ok,
+    text,
+)
+from .util import (
+    c_bold,
+    c_cyan,
+    c_dim,
+    c_gray,
+    c_green,
+    c_yellow,
+    run_async,
+    write_text,
+)
 
 
 class CampaignCommands:
     """Campaign group — composed into Cli (cf.cli); self.pos/flags/store and
     the dispatch helpers (_need/_feature/_campaign/_base) live there."""
+
+    def _launch(self) -> None:
+        """campaign launch <pack> — the one-command kill chain: bundle from
+        the pack, campaign + targets in the store, landing server up, smtp
+        blast to --email/--targets, then serve until interrupted."""
+        from .generator import generate, set_pack_dir, write_bundle
+        from .license import LicenseError, check_quota
+        from .server import LandingServer
+        from .util import c_cyan, c_dim, c_yellow
+
+        if len(self.pos) < 3:
+            raise SystemExit("campaign launch <pack> [--url U] [--profile P]")
+        set_pack_dir(str(self.flags.get("pack-dir") or "") or None)
+        base = str(self.flags.get("url", "")) or (
+            f"http://127.0.0.1:{_num(self.flags, 'port', 8080, int)}"
+        )
+        profiles = str(self.flags.get("profile", "")) or str(
+            self.flags.get("host", "")
+        )
+        if not profiles:
+            raise SystemExit("--profile P or --host H required")
+        try:
+            check_quota(self.lic, self.store)
+        except LicenseError as exc:
+            raise SystemExit(str(exc)) from None
+        emails: list[str] = [
+            e for e in str(self.flags.get("email", "")).split(",") if e.strip()
+        ]
+        tfile = self.flags.get("targets-file")
+        if tfile:
+            emails.extend(
+                line.strip()
+                for line in Path(str(tfile)).read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            )
+        if not emails:
+            raise SystemExit("--email a@b,c@tld or --targets-file FILE required")
+        has_chain = self.lic.has("payload")
+        if not has_chain:
+            text(
+                c_dim(
+                    "  note: payload chain needs the payload tier — bundle "
+                    "emitted without it"
+                )
+            )
+        bundle = generate(
+            self.pos[2],
+            seed=_num(self.flags, "seed", 0, int),
+            base_url=base,
+            include_chain=has_chain,
+        )
+        brand = bundle["persona"].get("brand", "")
+        camp_id = self.store.create_campaign(
+            bundle["label"],
+            scenario=bundle["variants"][0]["scenario"],
+            base_url=base,
+            meta={"kind": "psenc", "locale": bundle["locale"]},
+        )
+        try:
+            check_quota(self.lic, self.store, camp_id)
+        except LicenseError as exc:
+            raise SystemExit(str(exc)) from None
+        written = write_bundle(bundle, str(self.flags.get("out", "launch-kit")))
+        rows = []
+        for email in emails:
+            token = self.store.add_target(camp_id, email=email, label=brand)
+            rows.append({"token": token, "email": email, "label": brand})
+        ok(f"campaign {c_cyan(camp_id)} — {len(rows)} target(s)")
+        text(f"  bundle: {c_yellow(str(written.get('bundle.json')))}")
+        server = LandingServer(
+            self.store,
+            host=str(self.flags.get("bind", "127.0.0.1")),
+            port=_num(self.flags, "port", 8080, int),
+            base_url=base,
+            filter_scanners=True,
+        )
+        # first variant is the mail phish — its body is fully context-filled;
+        # the per-target {url}/{label}/{token} ride .format inside the dispatch
+        v1 = bundle["variants"][0]
+        subject = str(
+            self.flags.get("subject") or v1["subject"]
+            or "{label}: shared document requires your approval"
+        )
+        message = str(
+            self.flags.get("message")
+            or str(v1["body"]).replace(base, "{url}")
+            or "Shared with you: <b>{label}</b><br>Open {url} to view."
+        )
+        profile, password = self._smtp_profile(str(self.flags.get("profile", "")))
+        no_serve = bool(self.flags.get("no-serve"))
+
+        async def _run() -> None:
+            """start → smtp → hold on ONE loop: start/stop on separate
+            run_async loops mangles the runner's socket ownership."""
+            await server.start()
+            self._smtp_dispatch(
+                profile,
+                password,
+                {"id": camp_id},
+                base,
+                rows,
+                subject,
+                message,
+                {},
+            )
+            if no_serve:
+                await server.stop()
+                return
+            text(
+                f"  {c_dim('timeline:')}  gui → live SSE — Ctrl+C stops the server"
+            )
+            await server.serve_forever()
+
+        try:
+            run_async(_run())
+        except KeyboardInterrupt:
+            run_async(server.stop())
+        ok("landing down — campaign stays in the store")
 
     def cmd_campaign(self) -> None:
         if len(self.pos) < 2:
@@ -35,8 +170,11 @@ class CampaignCommands:
             ]
             text(_render_table(rows))
             return
+        if sub == "launch":
+            self._launch()
+            return
         if sub != "new":
-            err("campaign new|list")
+            err("campaign new|launch|list")
             raise SystemExit(2)
         if len(self.pos) < 3:
             err("campaign new <name>")
