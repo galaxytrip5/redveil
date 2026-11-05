@@ -234,7 +234,7 @@ class Cli(
             ]),
             ("license & gui", [
                 ("license status|activate <key>|deactivate", "offline license management"),
-                ("license issue --tier pro|trial|team", "vendor: generate a key"),
+                ("license issue --tier pro|trial|team", "vendor: generate a key — needs REDVEIL_LICENSE_SEED"),
                 ("license verify <key>", "check a key without saving"),
                 ("gui", "[--host H] [--port P] [--no-browser] [--no-auth]  pro dashboard"),
             ]),

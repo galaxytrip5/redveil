@@ -12,6 +12,7 @@ class AdminCommands:
 
     def cmd_license(self) -> None:
         from .license import (
+            KEY_PREFIX,
             LicenseError,
             deactivate,
             issue,
@@ -51,7 +52,7 @@ class AdminCommands:
             return
         if sub == "activate":
             if len(self.pos) < 3:
-                raise SystemExit("license activate <CFIX1....key>")
+                raise SystemExit(f"license activate <{KEY_PREFIX}-key>")
             try:
                 p = save(self.pos[2])
             except LicenseError as exc:
@@ -68,12 +69,16 @@ class AdminCommands:
         if sub == "issue":
             tier = str(self.flags.get("tier", "pro"))
             days = self.flags.get("days")
-            key, lic = issue(
-                tier,
-                licensee=str(self.flags.get("licensee", "unlicensed")),
-                days=_num(self.flags, "days", 0, int) if days else None,
-                seats=int(self.flags.get("seats", 1)),
-            )
+            try:
+                key, lic = issue(
+                    tier,
+                    licensee=str(self.flags.get("licensee", "unlicensed")),
+                    days=_num(self.flags, "days", 0, int) if days else None,
+                    seats=int(self.flags.get("seats", 1)),
+                )
+            except LicenseError as exc:
+                err(str(exc))
+                raise SystemExit(1) from None
             print(json_dumps({"key": key, "license": lic.as_dict()}))
             return
         if sub == "verify":

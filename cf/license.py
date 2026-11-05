@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import base64
-import hashlib
-import hmac
 import json
 import logging
 import os
@@ -15,8 +13,15 @@ from typing import Any
 
 from .util import json_dumps, write_text
 
-KEY_PREFIX = "CFIX1"
-SIGN_SEED = hashlib.sha256(b"clickfix-license-v2-2026-standalone").digest()
+KEY_PREFIX = "CFIX2"
+
+# Ed25519 public half of the vendor minting pair. The private half never
+# lives in source: it is a 32-byte hex seed, env-only (REDVEIL_LICENSE_SEED),
+# required by issue() and deliberately absent on user installs.
+MINT_ENV = "REDVEIL_LICENSE_SEED"
+PUBLIC_KEY = bytes.fromhex(
+    "3fc9fa0c30118ddc21838e33145cd432d7f7aa0b393177c58e76a92e747e683c"
+)
 
 TIERS: dict[str, dict[str, Any]] = {
     "demo": {
@@ -71,10 +76,41 @@ def _b64url_decode(text: str) -> bytes:
     return base64.urlsafe_b64decode(text + pad)
 
 
+def _mint_seed() -> bytes:
+    """Vendor-only: the signing seed must come from the environment. A
+    user install has no seed and can never mint — fail closed with an
+    actionable message."""
+    raw = os.environ.get(MINT_ENV, "").strip()
+    if not raw:
+        raise LicenseError(
+            f"minting key not configured — set {MINT_ENV} (64 hex chars), "
+            "the license private seed is not shipped with the source"
+        )
+    try:
+        seed = bytes.fromhex(raw)
+    except ValueError:
+        raise LicenseError(f"{MINT_ENV} is not valid hex") from None
+    if len(seed) != 32:
+        raise LicenseError(f"{MINT_ENV} must decode to 32 bytes, got {len(seed)}")
+    return seed
+
+
 def _sign(payload_b64: str) -> str:
-    return _b64url(
-        hmac.new(SIGN_SEED, payload_b64.encode("ascii"), hashlib.sha256).digest()
-    )
+    from .ed25519 import sign as _ed_sign
+
+    return _b64url(_ed_sign(_mint_seed(), payload_b64.encode("ascii")))
+
+
+def _sig_ok(payload_b64: str, sig: str) -> bool:
+    """Ed25519 verify against the embedded vendor key — False on any
+    malformed input, never raises."""
+    from .ed25519 import verify as _ed_verify
+
+    try:
+        sig_bytes = _b64url_decode(sig)
+    except (ValueError, TypeError):
+        return False
+    return _ed_verify(PUBLIC_KEY, payload_b64.encode("ascii"), sig_bytes)
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,13 +207,17 @@ def parse(key: str) -> License:
     raw = (key or "").strip()
     parts = raw.split(".")
     if len(parts) != 3 or parts[0] != KEY_PREFIX:
-        raise LicenseError("malformed key — expected CFIX1.<payload>.<sig>")
+        raise LicenseError(
+            f"malformed key — expected {KEY_PREFIX}.<payload>.<sig>"
+        )
     _prefix, payload_b64, sig = parts
     if not (payload_b64.isascii() and sig.isascii()):
         # .encode("ascii") in _sign would raise a bare UnicodeEncodeError
         raise LicenseError("malformed key — payload and signature must be ascii")
-    if not hmac.compare_digest(sig, _sign(payload_b64)):
-        raise LicenseError("signature mismatch — key was tampered with")
+    if not _sig_ok(payload_b64, sig):
+        raise LicenseError(
+            "signature mismatch — key is not vendor-issued or was tampered with"
+        )
     try:
         data: Any = json.loads(_b64url_decode(payload_b64))
     except (ValueError, TypeError) as exc:

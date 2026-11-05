@@ -711,10 +711,10 @@ def test_campaign_profile_merges_meta(tmp_path):
 
 
 def test_license_issue_parse_tamper_expire(tmp_path):
-    from cf.license import LicenseError, issue, parse
+    from cf.license import KEY_PREFIX, LicenseError, issue, parse
 
     key, lic = issue("pro", licensee="ACME", days=365)
-    assert key.startswith("CFIX1.")
+    assert key.startswith(KEY_PREFIX + ".")
     assert lic.tier == "pro" and lic.licensee == "ACME"
     assert lic.active and not lic.expired
     assert lic.has("relay") and not lic.watermark

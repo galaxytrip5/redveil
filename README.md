@@ -101,6 +101,7 @@ python redveil.py license issue --tier pro    # vendor side
 | `CF_C2_SIGN_KEY` | HMAC key for signed beacon commands (alternative to `--sign`) |
 | `SAAS_TOKEN` | default bearer token for `saas deliver` |
 | `CLICKFIX_LICENSE_FILE` | license file path (default `~/.clickfix/license.json`) |
+| `REDVEIL_LICENSE_SEED` | **vendor-only** — Ed25519 private seed (64 hex) for `license issue`; users never set this |
 | `C2_REAL`, `BEACON_KEY` | values baked into generated cloud-relay code |
 | `NO_COLOR`, `TERM=dumb` | disable ANSI colors |
 
