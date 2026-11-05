@@ -118,7 +118,9 @@ class CampaignCommands:
             or str(v1["body"]).replace(base, "{url}")
             or "Shared with you: <b>{label}</b><br>Open {url} to view."
         )
-        profile, password = self._smtp_profile(str(self.flags.get("profile", "")))
+        profile, password = self._smtp_profile(
+            str(self.flags.get("profile", "")), port_flag="smtp-port"
+        )
         no_serve = bool(self.flags.get("no-serve"))
 
         async def _run() -> None:

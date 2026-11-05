@@ -535,7 +535,8 @@ def test_campaign_launch_no_serve(tmp_path):
             ["--db", db, "campaign", "launch", "mytemplate",
              "--pack-dir", str(extra), "--seed", "9",
              "--email", "a@corp.tld,b@corp.tld",
-             "--host", "127.0.0.1", "--port", "1", "--from", "ops@corp.tld",
+             "--host", "127.0.0.1", "--smtp-port", "1", "--from", "ops@corp.tld",
+             "--port", str(_free_port()),
              "--no-serve", "--out", str(out)]
         ).run()
         == 0

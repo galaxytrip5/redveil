@@ -211,9 +211,13 @@ class DeliveryCommands:
         self.store.set_send_profile(name, profile.to_config())
         ok(f"profile saved: {name} ({profile.host}:{profile.port} {profile.tls})")
 
-    def _smtp_profile(self, name: str) -> tuple[Any, str]:
+    def _smtp_profile(
+        self, name: str, port_flag: str = "port", port_default: int = 587
+    ) -> tuple[Any, str]:
         """Profile precedence: saved --profile name > --host one-shot.
-        Password resolves like every secret: flag → env → prompt."""
+        Password resolves like every secret: flag → env → prompt. The port
+        flag name is a parameter — campaign launch reads --smtp-port
+        because its --port already names the landing server."""
         from .smtp_send import SmtpProfile
 
         if name:
@@ -227,7 +231,7 @@ class DeliveryCommands:
                 raise SystemExit("--profile or --host required")
             profile = SmtpProfile(
                 host=host,
-                port=_num(self.flags, "port", 587, int),
+                port=_num(self.flags, port_flag, port_default, int),
                 user=str(self.flags.get("user", "")),
                 sender=str(self.flags.get("from", "")),
                 tls=str(self.flags.get("tls", "starttls")),
