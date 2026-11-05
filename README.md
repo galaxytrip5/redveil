@@ -1,125 +1,156 @@
+<div align="center">
+
 # redveil
 
+### Un cadre de simulation red team, pensé pour les engagements autorisés
+
 [![CI](https://github.com/galaxytrip5/redveil/actions/workflows/ci.yml/badge.svg)](https://github.com/galaxytrip5/redveil/actions/workflows/ci.yml)
-[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-%E2%89%A5%203.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Licence](https://img.shields.io/badge/Licence-GPL--3.0-blue.svg)](LICENSE)
 
-ClickFix lures, legit-service C2, SaaS delivery and initial-access tooling for
-red-team engagements. Python 3.11+, single SQLite store, one pooled async HTTP
-client, no mandatory external services.
+**redveil** regroupe des composants destinés à préparer, exécuter et documenter des simulations de sécurité encadrées. Le projet fournit une interface en ligne de commande, un stockage local SQLite et des outils de génération et de reporting — sans service externe obligatoire.
 
-## Install
+[Découvrir les fonctionnalités](#fonctionnalités) · [Installation](#installation) · [Tests](#tests-et-qualité) · [Documentation](#documentation)
+
+</div>
+
+> [!IMPORTANT]
+> **Usage strictement autorisé.** N’utilisez redveil que dans le cadre d’un audit, d’un exercice ou d’une recherche pour lesquels vous disposez d’une autorisation explicite et préalable. Vous êtes responsable du respect des lois, du périmètre convenu et des règles d’engagement. Consultez également [EULA.md](EULA.md).
+
+## Sommaire
+
+- [Présentation](#présentation)
+- [Fonctionnalités](#fonctionnalités)
+- [Prérequis](#prérequis)
+- [Installation](#installation)
+- [Démarrage](#démarrage)
+- [Tests et qualité](#tests-et-qualité)
+- [Structure du projet](#structure-du-projet)
+- [Éditions](#éditions)
+- [Configuration et données](#configuration-et-données)
+- [Documentation](#documentation)
+- [Licence et utilisation responsable](#licence-et-utilisation-responsable)
+
+## Présentation
+
+redveil est un framework Python pour les équipes de sécurité qui souhaitent organiser des exercices red team contrôlés et reproductibles. Il rassemble la gestion des campagnes, un catalogue de techniques, des scénarios et modèles, ainsi que des fonctions de reporting dans une architecture légère.
+
+Le cœur du projet s’appuie sur **Python 3.11+**, **SQLite** et un client HTTP asynchrone basé sur `aiohttp`. Les données opérationnelles sont conservées localement. Les tests sont conçus pour fonctionner hors ligne par défaut.
+
+## Fonctionnalités
+
+| Domaine | Aperçu |
+|---|---|
+| **Organisation d’exercices** | Gestion structurée des campagnes et de leurs éléments associés. |
+| **Scénarios et modèles** | Bibliothèque de scénarios et génération à partir de packs de données validés. |
+| **Catalogue de techniques** | Catalogue éditable, avec validation des entrées et prise en charge des catégories intégrées. |
+| **Composants de simulation** | Modules regroupés autour de la préparation, de la livraison contrôlée et de l’observation des exercices. Leur usage doit rester dans le périmètre autorisé. |
+| **Interface** | CLI et tableau de bord local pour accéder aux fonctions du projet. |
+| **Suivi et restitution** | Stockage SQLite, événements de campagne et génération de rapports. Certaines options dépendent de l’édition et de la licence. |
+| **Conception sobre** | Pas de compte ni de télémétrie annoncés ; aucun service externe n’est requis pour utiliser le cœur du projet. |
+
+La portée exacte des fonctionnalités varie selon l’édition. Voir [EDITIONS.md](EDITIONS.md) pour la matrice détaillée.
+
+## Prérequis
+
+- Python **3.11 ou supérieur**
+- `pip`
+- Un environnement virtuel Python est recommandé
+
+## Installation
+
+Depuis la racine du dépôt :
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows : .venv\Scripts\activate
+python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
 
-Runtime dependency: `aiohttp`. Dev dependency: `pytest`.
+La dépendance d’exécution principale est `aiohttp`. L’extra `dev` installe `pytest` pour lancer les tests.
 
-## Run
+## Démarrage
+
+Afficher l’aide de la CLI :
 
 ```bash
-python redveil.py help          # branded entry point
-python clickfix.py help         # legacy entry point (same CLI)
-python -m cf                    # module entry
+python redveil.py help
 ```
 
-All three call `cf.cli.main`. `help` lists every command group: campaign,
-techniques, delivery & c2, apt modules, license & gui, payload & stager.
+Autres points d’entrée disponibles :
 
-## Test
+```bash
+python -m cf help
+python clickfix.py help
+```
+
+Ces points d’entrée appellent la même interface. Consultez l’aide intégrée pour découvrir les commandes et options disponibles dans votre édition. Avant tout exercice, définissez et faites approuver le périmètre, les systèmes concernés, les dates et les règles d’engagement.
+
+## Tests et qualité
+
+Exécuter la suite de tests :
 
 ```bash
 pytest
 ```
 
-Tests are offline by default: no test opens a network socket. The network layer
-is exercised through fake transports (`tests/test_http.py`).
+Les tests sont hors ligne par défaut et n’ouvrent pas de connexion réseau ; la couche réseau est testée au moyen de transports simulés.
 
-| file | covers |
+| Fichier | Couverture générale |
 |---|---|
-| `tests/test_cf.py` | core — store, lure, stager, techniques, report, gui, license |
-| `tests/test_http.py` | pooled client — retries, backoff, rate limits, redaction |
-| `tests/test_store_perf.py` | query-shape and batch-write budgets |
-| `tests/test_cli_fixes.py` | dispatch regressions, signed beacon commands |
+| `tests/test_cf.py` | Composants principaux, stockage, scénarios, rapports et interface |
+| `tests/test_http.py` | Client HTTP et comportements réseau simulés |
+| `tests/test_store_perf.py` | Requêtes et écritures du stockage |
+| `tests/test_cli_fixes.py` | Régressions de la CLI |
+| `tests/test_ops_boost.py` | Tests complémentaires des fonctions du projet |
+| `tests/test_license_ed.py` | Gestion des licences et primitives associées |
 
-## Layout
+## Structure du projet
 
-| path | role |
+| Chemin | Rôle |
 |---|---|
-| `cf/cli.py`, `cf/cli_core.py`, `cf/cmds_*.py` | dispatch core, flag/render helpers, six command groups |
-| `cf/store.py` | SQLite persistence (WAL, single connection, RLock) |
-| `cf/http.py` | one pooled async client — retries, backoff, rate limits |
-| `cf/server.py` | landing server: lure, stager, hit collection, OAuth |
-| `cf/lure.py`, `cf/stager.py` | lure rendering and Win+R stager builders (page + scenarios in `cf/data/`) |
-| `cf/c2.py`, `cf/delivery.py`, `cf/chain.py` | legit-service C2, SaaS notification delivery, AiTM token chain |
-| `cf/ext.py`, `cf/relay.py`, `cf/payload.py` | Chrome MV3 extension C2, cloud relay codegen, payload factory |
-| `cf/techniques.py` | technique catalog logic — rows live in `cf/data/techniques.json`, parsed on first use, `validate()` in the test suite |
-| `cf/generator.py`, `cf/cmds_generate.py` | category-pack generator — built-in packs in `cf/data/categories/*.json`, user template packs in `~/.clickfix/packs` (same schema, same validation; a same-id user pack shadows the builtin) or `--pack-dir DIR`, deterministic seed, one `mail-{n}.eml` draft per variant, `redveil-pro` seam for premium packs + exploit chains |
-| `cf/access.py`, `cf/creds.py`, `cf/lateral.py`, `cf/collect.py`, `cf/opsec.py` | apt module builders (collection + exfil snippets live in `cf/collect.py`) behind the `cmds_apt` commands |
-| `cf/report.py`, `cf/gui.py` | funnel report/CSV/Sigma export and the local dashboard (`cf/gui.html`) |
-| `cf/license.py` | signed license tiers, quotas, demo watermark |
-| `cf/util.py` | colors, json, `resolve_secret`, `run_async` timeouts |
-| `clickfix.py`, `redveil.py`, `cf/__main__.py` | entry points |
-| `cf/data/` | shipped data: technique rows, lure scenarios + template, payload factory header |
+| `cf/cli.py`, `cf/cli_core.py`, `cf/cmds_*.py` | Interface et groupes de commandes |
+| `cf/store.py` | Persistance SQLite |
+| `cf/http.py` | Client HTTP asynchrone mutualisé |
+| `cf/lure.py`, `cf/stager.py` | Composants de scénarios et de préparation |
+| `cf/techniques.py`, `cf/generator.py` | Catalogue et génération pilotée par des données |
+| `cf/report.py`, `cf/gui.py`, `cf/gui.html` | Restitution et tableau de bord |
+| `cf/data/` | Catalogues, scénarios et modèles fournis |
+| `tests/` | Tests automatisés |
+| `redveil.py`, `clickfix.py`, `cf/__main__.py` | Points d’entrée |
 
-## Data files
+> La présence de modules dans le dépôt ne signifie pas que chacun est inclus dans la distribution OSS. Référez-vous à [EDITIONS.md](EDITIONS.md) pour connaître le contenu publié.
 
-`cf/data/` ships inside the package via `[tool.setuptools.package-data]`:
+## Éditions
 
-| file | consumed by | load |
-|---|---|---|
-| `techniques.json` | `cf/techniques.py` | first `TECHNIQUES` access, cached |
-| `scenarios.json` | `cf/lure.py` | module import, cached |
-| `lure_template.html` | `cf/lure.py` `_template()` | first render, cached |
-| `payload_factory.hpp` | `cf/payload.py` `_payload_hpp()` | first read, cached |
-| `categories/*.json` | `cf/generator.py` `load_pack()` | first `generate`, validated at load, full `validate()` in the test suite |
+Le dépôt documente une édition open source et une édition Pro distribuée séparément. Certaines catégories et options avancées ne sont pas incluses dans le paquet OSS. Les détails et les règles de séparation sont décrits dans [EDITIONS.md](EDITIONS.md).
 
-Edit the JSON directly. The suite validates technique rows against `KINDS`
-(`validate()`) and renders every scenario, so a bad row fails `pytest`.
+## Configuration et données
 
-## Tiers
+Les fichiers de données du projet se trouvent dans `cf/data/` et sont inclus dans le paquet selon la configuration de `pyproject.toml`. Les catalogues et packs suivent des schémas validés par les tests.
 
-| tier | campaigns | targets | features | watermark |
-|---|---|---|---|---|
-| demo | 2 | 5 | — | yes |
-| trial (14d) | 3 | 10 | sigma, csv | no |
-| pro (365d) | unlimited | unlimited | + relay, ext, payload | no |
-| team (365d) | unlimited | unlimited | + multi-seat | no |
+Pour les paramètres et secrets, consultez la documentation source et l’aide de la CLI. **Ne placez jamais de secrets, clés privées, jetons ou données sensibles dans le dépôt**, les journaux ou les rapports partagés. Utilisez des valeurs de test pour les démonstrations et stockez les secrets selon les règles de votre organisation.
 
-`0` means unlimited. Feature gates (`require_feature`): `report --csv`,
-`technique export --sigma`, `ext`, `relay`, `payload`. Keys are offline-signed
-Ed25519, prefix `CFIX2` (old `CFIX1` keys fail closed) — terms in `EULA.md`,
-commercial notes in `SELLING.md`.
+## Documentation
 
-```bash
-python redveil.py license status
-python redveil.py license activate <key>
-python redveil.py license issue --tier pro    # vendor side
-```
+- [EDITIONS.md](EDITIONS.md) — différence entre les éditions
+- [EULA.md](EULA.md) — conditions d’utilisation (modèle à faire vérifier juridiquement)
+- [LICENSE](LICENSE) — licence du code
+- [ROADMAP.md](ROADMAP.md) — évolutions envisagées
+- [TODOS.md](TODOS.md) — tâches en attente
+- [SELLING.md](SELLING.md) — informations commerciales
 
-## Configuration
+## Licence et utilisation responsable
 
-| variable | effect |
-|---|---|
-| `CF_INGEST_KEY` | shared secret for `/ext/ingest` and `/api/v1/results` — **required** when the server binds a non-loopback host |
-| `CF_C2_SIGN_KEY` | HMAC key for signed beacon commands (alternative to `--sign`) |
-| `SAAS_TOKEN` | default bearer token for `saas deliver` |
-| `CLICKFIX_LICENSE_FILE` | license file path (default `~/.clickfix/license.json`) |
-| `REDVEIL_LICENSE_SEED` | **vendor-only** — Ed25519 private seed (64 hex) for `license issue`; users never set this |
-| `C2_REAL`, `BEACON_KEY` | values baked into generated cloud-relay code |
-| `NO_COLOR`, `TERM=dumb` | disable ANSI colors |
+Le code de ce dépôt est distribué sous **GNU GPL-3.0** ; consultez [LICENSE](LICENSE) pour les conditions complètes. Des conditions additionnelles ou distinctes peuvent concerner d’autres éditions : vérifiez les documents applicables avant toute distribution ou utilisation.
 
-Secrets resolve in order: flag → env → piped stdin (non-tty) → prompt.
+Toute utilisation doit être limitée aux systèmes pour lesquels une autorisation explicite a été obtenue. Respectez le périmètre, les règles d’engagement, la confidentialité et les obligations de signalement convenus avec le propriétaire des systèmes.
 
-## Docs
+---
 
-- `LICENSE` — GPL-3.0
-- `EULA.md` — license terms
-- `SELLING.md` — commercial notes
-- `TODOS.md` — open work
-- `ROADMAP.md` — planned versions
-- `EDITIONS.md` — open-source core vs `redveil-pro` matrix and seams
+<div align="center">
 
-## Version
+Fait pour des exercices de sécurité **autorisés, maîtrisés et documentés**.
 
-Single source: `pyproject.toml` → `cf.__version__` must match.
+</div>
