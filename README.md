@@ -2,155 +2,159 @@
 
 # redveil
 
-### Un cadre de simulation red team, pensé pour les engagements autorisés
+### A red-team framework for controlled delivery and engagement workflows
 
 [![CI](https://github.com/galaxytrip5/redveil/actions/workflows/ci.yml/badge.svg)](https://github.com/galaxytrip5/redveil/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-%E2%89%A5%203.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Licence](https://img.shields.io/badge/Licence-GPL--3.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 
-**redveil** regroupe des composants destinés à préparer, exécuter et documenter des simulations de sécurité encadrées. Le projet fournit une interface en ligne de commande, un stockage local SQLite et des outils de génération et de reporting — sans service externe obligatoire.
+**redveil** is a Python-based framework for controlled red-team engagements, focused on ClickFix-style lures, legitimate-service C2 patterns, delivery workflows, and initial-access tooling. It is designed to support structured and traceable operations in a local-first, lightweight environment.
 
-[Découvrir les fonctionnalités](#fonctionnalités) · [Installation](#installation) · [Tests](#tests-et-qualité) · [Documentation](#documentation)
+[Overview](#overview) · [Features](#features) · [Installation](#installation) · [Quick start](#quick-start) · [Testing](#testing) · [Documentation](#documentation)
 
 </div>
 
 > [!IMPORTANT]
-> **Usage strictement autorisé.** N’utilisez redveil que dans le cadre d’un audit, d’un exercice ou d’une recherche pour lesquels vous disposez d’une autorisation explicite et préalable. Vous êtes responsable du respect des lois, du périmètre convenu et des règles d’engagement. Consultez également [EULA.md](EULA.md).
+> **Use only in authorized environments.** This project is intended for security testing and red-team exercises with explicit authorization from the relevant stakeholders. Ensure you comply with legal requirements, engagement scope, and internal policies before using it. See [EULA.md](EULA.md).
 
-## Sommaire
+## Table of contents
 
-- [Présentation](#présentation)
-- [Fonctionnalités](#fonctionnalités)
-- [Prérequis](#prérequis)
+- [Overview](#overview)
+- [Features](#features)
+- [Requirements](#requirements)
 - [Installation](#installation)
-- [Démarrage](#démarrage)
-- [Tests et qualité](#tests-et-qualité)
-- [Structure du projet](#structure-du-projet)
-- [Éditions](#éditions)
-- [Configuration et données](#configuration-et-données)
+- [Quick start](#quick-start)
+- [Testing](#testing)
+- [Project layout](#project-layout)
+- [Editions](#editions)
+- [Configuration and data](#configuration-and-data)
 - [Documentation](#documentation)
-- [Licence et utilisation responsable](#licence-et-utilisation-responsable)
+- [License and responsible use](#license-and-responsible-use)
 
-## Présentation
+## Overview
 
-redveil est un framework Python pour les équipes de sécurité qui souhaitent organiser des exercices red team contrôlés et reproductibles. Il rassemble la gestion des campagnes, un catalogue de techniques, des scénarios et modèles, ainsi que des fonctions de reporting dans une architecture légère.
+redveil is a Python 3.11+ project built around a small, reusable set of capability blocks for security operators. It integrates campaign management, technique catalogs, generated lure content, local persistence, reporting and a lightweight HTTP stack, all without requiring a mandatory external service for the core workflow.
 
-Le cœur du projet s’appuie sur **Python 3.11+**, **SQLite** et un client HTTP asynchrone basé sur `aiohttp`. Les données opérationnelles sont conservées localement. Les tests sont conçus pour fonctionner hors ligne par défaut.
+The repository is organized around a single SQLite-backed store, a shared async HTTP client, and a modular command interface. The code structure emphasizes maintainability, local execution, validation through tests, and explicit feature boundaries between the open-source core and optional premium capabilities.
 
-## Fonctionnalités
+## Features
 
-| Domaine | Aperçu |
+| Area | Description |
 |---|---|
-| **Organisation d’exercices** | Gestion structurée des campagnes et de leurs éléments associés. |
-| **Scénarios et modèles** | Bibliothèque de scénarios et génération à partir de packs de données validés. |
-| **Catalogue de techniques** | Catalogue éditable, avec validation des entrées et prise en charge des catégories intégrées. |
-| **Composants de simulation** | Modules regroupés autour de la préparation, de la livraison contrôlée et de l’observation des exercices. Leur usage doit rester dans le périmètre autorisé. |
-| **Interface** | CLI et tableau de bord local pour accéder aux fonctions du projet. |
-| **Suivi et restitution** | Stockage SQLite, événements de campagne et génération de rapports. Certaines options dépendent de l’édition et de la licence. |
-| **Conception sobre** | Pas de compte ni de télémétrie annoncés ; aucun service externe n’est requis pour utiliser le cœur du projet. |
+| **Campaign management** | Structured workflows for campaign and target-oriented operations. |
+| **Technique catalog** | Built-in technique definitions, validation, and extensible data-driven content. |
+| **Lure generation** | Templates, scenarios and delivery-oriented patterns that can be rendered and adapted. |
+| **Delivery tooling** | Components for controlled payload and distribution flows. |
+| **C2 / command flows** | Legitimate-service styled communication and logic for operational control. |
+| **Reporting** | Local reporting and export-oriented functionality for results and summaries. |
+| **CLI-first workflow** | Command-line entry points for broad operational control. |
+| **Local-first architecture** | Local SQLite storage and a pooled async HTTP client reduce reliance on external infrastructure. |
+| **Validation-focused** | Automated tests cover the main execution paths and regression safety. |
 
-La portée exacte des fonctionnalités varie selon l’édition. Voir [EDITIONS.md](EDITIONS.md) pour la matrice détaillée.
+For a more detailed view of the edition boundaries and premium capabilities, see [EDITIONS.md](EDITIONS.md).
 
-## Prérequis
+## Requirements
 
-- Python **3.11 ou supérieur**
+- Python **3.11+**
 - `pip`
-- Un environnement virtuel Python est recommandé
+- A virtual environment is recommended
 
 ## Installation
 
-Depuis la racine du dépôt :
+From the repository root:
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # Windows : .venv\Scripts\activate
+source .venv/bin/activate    # Windows: .venv\Scripts\activate
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
 
-La dépendance d’exécution principale est `aiohttp`. L’extra `dev` installe `pytest` pour lancer les tests.
+The runtime dependency is `aiohttp`. The `dev` extra installs `pytest` for local validation.
 
-## Démarrage
+## Quick start
 
-Afficher l’aide de la CLI :
+Display the CLI help:
 
 ```bash
 python redveil.py help
 ```
 
-Autres points d’entrée disponibles :
+Other entry points:
 
 ```bash
 python -m cf help
 python clickfix.py help
 ```
 
-Ces points d’entrée appellent la même interface. Consultez l’aide intégrée pour découvrir les commandes et options disponibles dans votre édition. Avant tout exercice, définissez et faites approuver le périmètre, les systèmes concernés, les dates et les règles d’engagement.
+All of these route back to the same core CLI implementation. The help output lists the command groups and subcommands available in the current build.
 
-## Tests et qualité
+Before running any operational workflow, define a clear authorization boundary, scope, environment, and documentation trail for the engagement.
 
-Exécuter la suite de tests :
+## Testing
+
+Run the test suite:
 
 ```bash
 pytest
 ```
 
-Les tests sont hors ligne par défaut et n’ouvrent pas de connexion réseau ; la couche réseau est testée au moyen de transports simulés.
+The repository is designed to keep tests offline by default. No test opens a network socket; the HTTP layer is exercised using mocked or fake transports.
 
-| Fichier | Couverture générale |
+| File | Scope |
 |---|---|
-| `tests/test_cf.py` | Composants principaux, stockage, scénarios, rapports et interface |
-| `tests/test_http.py` | Client HTTP et comportements réseau simulés |
-| `tests/test_store_perf.py` | Requêtes et écritures du stockage |
-| `tests/test_cli_fixes.py` | Régressions de la CLI |
-| `tests/test_ops_boost.py` | Tests complémentaires des fonctions du projet |
-| `tests/test_license_ed.py` | Gestion des licences et primitives associées |
+| `tests/test_cf.py` | Core application behavior, persistence, scenarios, reporting, GUI and licensing |
+| `tests/test_http.py` | HTTP client behavior, retries, backoff, rate limiting and redaction logic |
+| `tests/test_store_perf.py` | Storage access patterns and write-performance checks |
+| `tests/test_cli_fixes.py` | CLI dispatch and regression validation |
+| `tests/test_ops_boost.py` | Additional operational coverage |
+| `tests/test_license_ed.py` | Licensing checks and related primitives |
 
-## Structure du projet
+## Project layout
 
-| Chemin | Rôle |
+| Path | Role |
 |---|---|
-| `cf/cli.py`, `cf/cli_core.py`, `cf/cmds_*.py` | Interface et groupes de commandes |
-| `cf/store.py` | Persistance SQLite |
-| `cf/http.py` | Client HTTP asynchrone mutualisé |
-| `cf/lure.py`, `cf/stager.py` | Composants de scénarios et de préparation |
-| `cf/techniques.py`, `cf/generator.py` | Catalogue et génération pilotée par des données |
-| `cf/report.py`, `cf/gui.py`, `cf/gui.html` | Restitution et tableau de bord |
-| `cf/data/` | Catalogues, scénarios et modèles fournis |
-| `tests/` | Tests automatisés |
-| `redveil.py`, `clickfix.py`, `cf/__main__.py` | Points d’entrée |
+| `cf/cli.py`, `cf/cli_core.py`, `cf/cmds_*.py` | Command dispatch and CLI subcommand logic |
+| `cf/store.py` | SQLite persistence layer |
+| `cf/http.py` | Shared async HTTP client |
+| `cf/lure.py`, `cf/stager.py` | Lure rendering and operation staging logic |
+| `cf/techniques.py`, `cf/generator.py` | Technique catalog and data-driven generation |
+| `cf/report.py`, `cf/gui.py`, `cf/gui.html` | Reporting and local dashboard experience |
+| `cf/data/` | Bundled scenarios, templates and data files |
+| `tests/` | Automated validation suite |
+| `redveil.py`, `clickfix.py`, `cf/__main__.py` | Project entry points |
 
-> La présence de modules dans le dépôt ne signifie pas que chacun est inclus dans la distribution OSS. Référez-vous à [EDITIONS.md](EDITIONS.md) pour connaître le contenu publié.
+> The presence of modules in the repository does not necessarily mean that every capability is included in the OSS build. Refer to [EDITIONS.md](EDITIONS.md) for the public vs premium split.
 
-## Éditions
+## Editions
 
-Le dépôt documente une édition open source et une édition Pro distribuée séparément. Certaines catégories et options avancées ne sont pas incluses dans le paquet OSS. Les détails et les règles de séparation sont décrits dans [EDITIONS.md](EDITIONS.md).
+This project is designed around a shared codebase with multiple edition profiles. The OSS source in this repository is paired with a separate proprietary distribution for advanced capability layers. The split is documented in [EDITIONS.md](EDITIONS.md), which describes when functionality is open-source, optional, or gated by a license.
 
-## Configuration et données
+## Configuration and data
 
-Les fichiers de données du projet se trouvent dans `cf/data/` et sont inclus dans le paquet selon la configuration de `pyproject.toml`. Les catalogues et packs suivent des schémas validés par les tests.
+Data files live under `cf/data/` and are packaged via the configuration in `pyproject.toml`. The project is intentionally structured to let operators work with validated data definitions and JSON-driven packs rather than hardcoding functionality in multiple places.
 
-Pour les paramètres et secrets, consultez la documentation source et l’aide de la CLI. **Ne placez jamais de secrets, clés privées, jetons ou données sensibles dans le dépôt**, les journaux ou les rapports partagés. Utilisez des valeurs de test pour les démonstrations et stockez les secrets selon les règles de votre organisation.
+Keep secrets and sensitive values out of the repository, logs, or generated outputs. Use ephemeral test values for demonstrations, and store real credentials according to your organization’s handling policy.
 
 ## Documentation
 
-- [EDITIONS.md](EDITIONS.md) — différence entre les éditions
-- [EULA.md](EULA.md) — conditions d’utilisation (modèle à faire vérifier juridiquement)
-- [LICENSE](LICENSE) — licence du code
-- [ROADMAP.md](ROADMAP.md) — évolutions envisagées
-- [TODOS.md](TODOS.md) — tâches en attente
-- [SELLING.md](SELLING.md) — informations commerciales
+- [EDITIONS.md](EDITIONS.md) — open-source vs premium capability split
+- [EULA.md](EULA.md) — license and usage terms
+- [LICENSE](LICENSE) — project license
+- [ROADMAP.md](ROADMAP.md) — planned roadmap and version direction
+- [TODOS.md](TODOS.md) — current work items
+- [SELLING.md](SELLING.md) — business/distribution notes
 
-## Licence et utilisation responsable
+## License and responsible use
 
-Le code de ce dépôt est distribué sous **GNU GPL-3.0** ; consultez [LICENSE](LICENSE) pour les conditions complètes. Des conditions additionnelles ou distinctes peuvent concerner d’autres éditions : vérifiez les documents applicables avant toute distribution ou utilisation.
+The repository is distributed under the **GNU GPL-3.0** license. Please review [LICENSE](LICENSE) for the full terms. If you are using a licensed or proprietary edition, make sure you also review any additional terms that apply to that distribution.
 
-Toute utilisation doit être limitée aux systèmes pour lesquels une autorisation explicite a été obtenue. Respectez le périmètre, les règles d’engagement, la confidentialité et les obligations de signalement convenus avec le propriétaire des systèmes.
+Use this project only within the boundaries of explicit authorization, approved scope, and applicable laws. Maintain proper documentation, minimize operational risk, and treat the resulting artifacts as controlled security tooling rather than generic software.
 
 ---
 
 <div align="center">
 
-Fait pour des exercices de sécurité **autorisés, maîtrisés et documentés**.
+Built for authorized, controlled, and documented security operations.
 
 </div>
