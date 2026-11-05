@@ -10,7 +10,7 @@
 
 **redveil** is a Python project for authorized, controlled security exercises. Its source combines campaign-oriented components, data-driven scenarios, local persistence, and reporting in a modular codebase.
 
-[About](#about) · [Project structure](#project-structure) · [Development](#development) · [Responsible use](#responsible-use)
+[About](#about) · [Quickstart](#quickstart) · [Project structure](#project-structure) · [Development](#development) · [Responsible use](#responsible-use)
 
 </div>
 
@@ -22,6 +22,16 @@
 redveil is written primarily in Python and requires Python 3.11 or newer. The repository describes a red-team framework involving simulated delivery workflows and command-and-control concepts. Those capabilities are dual-use; this project should be handled as controlled security tooling, not run against public or third-party systems without permission.
 
 The codebase uses a local SQLite store, an asynchronous HTTP client, and a command-oriented architecture. Project data such as catalogs and scenarios is kept separately from core logic, which supports validation and maintainability.
+
+## Quickstart
+
+```bash
+git clone https://github.com/galaxytrip5/redveil.git && cd redveil
+python -m pip install -e ".[dev]"
+python redveil.py generate list
+python redveil.py generate bank --seed 7 --url https://phish.example --out kit
+ls kit   # bundle.json + lure-*.html + mail-*.eml
+```
 
 ## Project at a glance
 
@@ -60,7 +70,7 @@ Create a virtual environment and install the development dependencies:
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate     # Windows: .venv\\Scripts\\activate
+source .venv/bin/activate     # Windows: .venv\Scripts\activate
 python -m pip install -e ".[dev]"
 ```
 
@@ -78,6 +88,8 @@ For readers exploring defensive and authorized security work, this project relat
 
 ## Documentation
 
+- [CONTRIBUTING.md](CONTRIBUTING.md) — contribution guide
+- [SECURITY.md](SECURITY.md) — security policy
 - [EDITIONS.md](EDITIONS.md) — edition and feature boundaries
 - [EULA.md](EULA.md) — usage terms (template; not legal advice)
 - [LICENSE](LICENSE) — GNU GPL-3.0 license text
